@@ -434,7 +434,10 @@ const dates = RAW_DATA.map(d => d.date);
         legend:{ display:false },
         tooltip:{
           ...CHART_DEFAULTS.plugins.tooltip,
-          callbacks:{ label: ctx => 'MSTR: ' + ctx.raw.y.toLocaleString() + ' BTC' }
+          callbacks:{
+            title: items => items[0].label,
+            label: ctx => 'MSTR: ' + ctx.parsed.y.toLocaleString() + ' BTC'
+          }
         }
       },
       scales:{
@@ -522,7 +525,10 @@ const dates = RAW_DATA.map(d => d.date);
         legend:{ display:false },
         tooltip:{
           ...CHART_DEFAULTS.plugins.tooltip,
-          callbacks:{ label: ctx => 'ETF: ' + (ctx.raw.y/1e6).toFixed(3) + 'M BTC' }
+          callbacks:{
+            title: items => items[0].label,
+            label: ctx => 'ETF: ' + (ctx.parsed.y/1e6).toFixed(3) + 'M BTC'
+          }
         }
       },
       scales:{
