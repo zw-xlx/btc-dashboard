@@ -98,9 +98,6 @@ footer{text-align:center;color:#484f58;font-size:0.72em;padding:20px 16px 30px}
 <nav class="top-nav" id="topNav">
   <span class="brand">₿ BTC 看板</span>
   <a href="#sec-overview">今日概览</a>
-  <a href="#sec-fear">恐惧贪婪</a>
-  <a href="#sec-ahr999">AHR999</a>
-  <a href="#sec-mvrv">MVRV</a>
   <a href="#sec-mstr">MSTR</a>
   <a href="#sec-etf">ETF</a>
   <a href="#sec-usdc">USDC</a>
@@ -114,46 +111,15 @@ footer{text-align:center;color:#484f58;font-size:0.72em;padding:20px 16px 30px}
 </div>
 <hr class="divider">
 
-<!-- ============ 恐惧贪婪指数 ============ -->
-<div class="section" id="sec-fear">
-  <div class="section-title">📉 恐惧贪婪指数走势</div>
-  <p class="section-sub">0=极度恐惧 · 50=中性 · 100=极度贪婪</p>
-  <div class="chart-box">
-    <div class="chart-wrap"><canvas id="chart-fear"></canvas></div>
-  </div>
-</div>
-<hr class="divider">
-
-<!-- ============ AHR999 ============ -->
-<div class="section" id="sec-ahr999">
-  <div class="section-title">🔢 AHR999 走势</div>
-  <p class="section-sub">AHR999 指标 · 抄底区 &lt;0.45 · 定投区 0.45–1.2 · 观望区 &gt;1.2</p>
-  <div class="chart-box">
-    <div class="chart-wrap"><canvas id="chart-ahr999"></canvas></div>
-    <div class="zone-legend">
-      <span><span class="zone-dot" style="background:#3fb95044"></span>抄底区 (&lt;0.45)</span>
-      <span><span class="zone-dot" style="background:#d2992244"></span>定投区 (0.45–1.2)</span>
-      <span><span class="zone-dot" style="background:#f8514944"></span>观望区 (&gt;1.2)</span>
-    </div>
-  </div>
-</div>
-<hr class="divider">
-
-<!-- ============ MVRV ============ -->
-<div class="section" id="sec-mvrv">
-  <div class="section-title">📊 MVRV 走势</div>
-  <p class="section-sub">链上市值 / 已实现市值 · &lt;1 低估 · &gt;3.5 高估</p>
-  <div class="chart-box">
-    <div class="chart-wrap"><canvas id="chart-mvrv"></canvas></div>
-  </div>
-</div>
-<hr class="divider">
-
 <!-- ============ MSTR ============ -->
 <div class="section" id="sec-mstr">
   <div class="section-title">🏢 MSTR 持仓数据</div>
   <p class="section-sub" id="mstr-date">微策略 MicroStrategy 最新持仓</p>
   <div class="cards-grid" id="cards-mstr"></div>
+  <div class="chart-box">
+    <h3>📈 MSTR 持仓 BTC 走势（月度）</h3>
+    <div class="chart-wrap"><canvas id="chart-mstr-btc"></canvas></div>
+  </div>
 </div>
 <hr class="divider">
 
@@ -162,6 +128,10 @@ footer{text-align:center;color:#484f58;font-size:0.72em;padding:20px 16px 30px}
   <div class="section-title">💰 BTC ETF 持仓</div>
   <p class="section-sub" id="etf-date">现货 ETF 累计持仓</p>
   <div class="cards-grid" id="cards-etf"></div>
+  <div class="chart-box">
+    <h3>📈 BTC ETF 持仓走势（月度）</h3>
+    <div class="chart-wrap"><canvas id="chart-etf-btc"></canvas></div>
+  </div>
 </div>
 <hr class="divider">
 
@@ -274,7 +244,7 @@ const RAW_DATA = [
   { date:"2026-04-17", btc_price:74769, drawdown:-40.7, fear:21, fear_label:"极度恐惧", ahr999:0.4213, mvrv:1.38, wma200:59932, mstr_btc:780897, mstr_price:148.94, mstr_mnav:1.18, mstr_debt_ratio:0.38, etf_btc:1303147, usdc_mcap:78710572133 },
   { date:"2026-04-18", btc_price:77230, drawdown:-38.7, fear:26, fear_label:"恐惧", ahr999:0.45, mvrv:1.39, wma200:59944, mstr_btc:780897, mstr_price:166.52, mstr_mnav:1.25, mstr_debt_ratio:0.34, mstr_cost_basis:75577, etf_btc:1294134, usdc_mcap:78526635189 },
   { date:"2026-04-19", btc_price:75603, drawdown:-40.0, fear:27, fear_label:"恐惧", ahr999:0.432, mvrv:1.42, wma200:59936, mstr_btc:780897, mstr_price:166.52, mstr_mnav:1.27, mstr_debt_ratio:0.34, mstr_cost_basis:75577, etf_btc:1324365, usdc_mcap:78494980950 },
-  { date:"2026-04-20", btc_price:74516, drawdown:-40.9, fear:29, fear_label:"恐惧", ahr999:0.4204, mvrv:1.40, wma200:60192, mstr_btc:780897, mstr_price:166.52, mstr_mnav:1.29, mstr_debt_ratio:0.34, mstr_cost_basis:75577, etf_btc:1343685, usdc_mcap:78252711986 },
+  { date:"2026-04-20", btc_price:74516, drawdown:-40.9, fear:29, fear_label:"恐惧", ahr999:0.4204, mvrv:1.40, wma200:60192, mstr_btc:815061, mstr_price:166.52, mstr_mnav:1.29, mstr_debt_ratio:0.34, mstr_cost_basis:75527, etf_btc:1343685, usdc_mcap:78252711986 },
 ];
 // ========== 数据结束 ==========
 
@@ -382,124 +352,6 @@ function makeDataset(label, data, color, fill=false) {
 const dates = RAW_DATA.map(d => d.date);
 
 
-// ========== 恐惧贪婪图 ==========
-(function renderFear() {
-  const data = RAW_DATA.map(d => ({ x: d.date, y: d.fear }));
-  const ctx = document.getElementById('chart-fear').getContext('2d');
-
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      datasets: [{
-        label: '恐惧贪婪',
-        data,
-        borderColor: 'rgb(88,166,255)',
-        backgroundColor: (ctx2) => {
-          const chart = ctx2.chart;
-          const {ctx: c, chartArea} = chart;
-          if (!chartArea) return 'rgba(88,166,255,0.1)';
-          const gradient = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          gradient.addColorStop(0, 'rgba(245,193,66,0.4)');
-          gradient.addColorStop(0.5, 'rgba(88,166,255,0.2)');
-          gradient.addColorStop(1, 'rgba(248,81,73,0.4)');
-          return gradient;
-        },
-        borderWidth: 2,
-        pointRadius: data.length > 60 ? 0 : 3,
-        pointHoverRadius: 5,
-        tension: 0.4,
-        fill: true,
-      }]
-    },
-    options: {
-      ...CHART_DEFAULTS,
-      plugins: {
-        ...CHART_DEFAULTS.plugins,
-        tooltip: {
-          ...CHART_DEFAULTS.plugins.tooltip,
-          callbacks: {
-            label: ctx => '恐惧贪婪: ' + ctx.raw.y + ' (' + RAW_DATA.find(d=>d.date===ctx.label)?.fear_label + ')'
-          }
-        }
-      },
-      scales: {
-        ...CHART_DEFAULTS.scales,
-        y: { ...CHART_DEFAULTS.scales.y, min: 0, max: 100, ticks: { color: '#8b949e' } }
-      }
-    }
-  });
-})();
-
-// ========== AHR999 图 ==========
-(function renderAhr999() {
-  const data = RAW_DATA.map(d => ({ x: d.date, y: d.ahr999 }));
-  const ctx = document.getElementById('chart-ahr999').getContext('2d');
-
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      datasets: [
-        makeDataset('AHR999', data, 'rgb(63,185,80)', false),
-        { label:'抄底上限', data: dates.map(d => ({ x:d, y:0.45 })), borderColor:'rgba(63,185,80,0.5)', borderWidth:1, borderDash:[4,4], pointRadius:0, fill: { target: 'origin', above: 'rgba(63,185,80,0.08)' } },
-        { label:'定投上限', data: dates.map(d => ({ x:d, y:1.2 })), borderColor:'rgba(248,81,73,0.5)', borderWidth:1, borderDash:[4,4], pointRadius:0 },
-      ]
-    },
-    options: {
-      ...CHART_DEFAULTS,
-      plugins: {
-        ...CHART_DEFAULTS.plugins,
-        legend: { display: false },
-        tooltip: {
-          ...CHART_DEFAULTS.plugins.tooltip,
-          callbacks: {
-            label: ctx => {
-              if (ctx.datasetIndex !== 0) return null;
-              const v = ctx.raw.y;
-              const zone = v < 0.45 ? '抄底区🟢' : v <= 1.2 ? '定投区🟡' : '观望区🔴';
-              return 'AHR999: ' + v + ' (' + zone + ')';
-            }
-          }
-        }
-      }
-    }
-  });
-})();
-
-// ========== MVRV 图 ==========
-(function renderMvrv() {
-  const data = RAW_DATA.map(d => ({ x: d.date, y: d.mvrv }));
-  const ctx = document.getElementById('chart-mvrv').getContext('2d');
-
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      datasets: [
-        makeDataset('MVRV', data, 'rgb(88,166,255)', true),
-        { label:'低估线', data: dates.map(d => ({ x:d, y:1 })), borderColor:'rgba(63,185,80,0.6)', borderWidth:1, borderDash:[4,4], pointRadius:0 },
-        { label:'高估线', data: dates.map(d => ({ x:d, y:3.5 })), borderColor:'rgba(248,81,73,0.6)', borderWidth:1, borderDash:[4,4], pointRadius:0 },
-      ]
-    },
-    options: {
-      ...CHART_DEFAULTS,
-      plugins: {
-        ...CHART_DEFAULTS.plugins,
-        legend: { display: false },
-        tooltip: {
-          ...CHART_DEFAULTS.plugins.tooltip,
-          callbacks: {
-            label: ctx => {
-              if (ctx.datasetIndex !== 0) return null;
-              const v = ctx.raw.y;
-              const tag = v < 1 ? '低估' : v < 2.5 ? '合理' : v < 3.5 ? '偏高' : '高估';
-              return 'MVRV: ' + v + ' (' + tag + ')';
-            }
-          }
-        }
-      }
-    }
-  });
-})();
-
 // ========== MSTR 持仓 ==========
 (function renderMstr() {
   const d = RAW_DATA[RAW_DATA.length - 1];
@@ -528,6 +380,80 @@ const dates = RAW_DATA.map(d => d.date);
       <div class="info-note">${item.note}</div>
     </div>
   `).join('');
+
+  // ----- MSTR 持仓 BTC 月走势（历史月末值，来源：MSTR 8-K 披露 + saylortracker）-----
+  const mstrHistory = [
+    { x:'2024-01-31', y:190000 },
+    { x:'2024-02-29', y:193000 },
+    { x:'2024-03-31', y:214400 },
+    { x:'2024-04-30', y:214400 },
+    { x:'2024-05-31', y:214400 },
+    { x:'2024-06-30', y:226331 },
+    { x:'2024-07-31', y:226500 },
+    { x:'2024-08-31', y:226500 },
+    { x:'2024-09-30', y:252220 },
+    { x:'2024-10-31', y:279420 },
+    { x:'2024-11-30', y:402100 },
+    { x:'2024-12-31', y:446400 },
+    { x:'2025-01-31', y:471107 },
+    { x:'2025-02-28', y:499096 },
+    { x:'2025-03-31', y:528185 },
+    { x:'2025-04-30', y:553555 },
+    { x:'2025-05-31', y:580250 },
+    { x:'2025-06-30', y:597325 },
+    { x:'2025-07-31', y:628946 },
+    { x:'2025-08-31', y:636505 },
+    { x:'2025-09-30', y:640031 },
+    { x:'2025-10-31', y:649870 },
+    { x:'2025-11-30', y:668000 },
+    { x:'2025-12-31', y:685000 },
+    { x:'2026-01-31', y:725300 },
+    { x:'2026-02-28', y:755400 },
+    { x:'2026-03-31', y:780897 },
+    { x:'2026-04-20', y:815061 },
+  ];
+  new Chart(document.getElementById('chart-mstr-btc').getContext('2d'), {
+    type:'line',
+    data:{ datasets:[{
+      label:'MSTR 持仓 BTC',
+      data: mstrHistory,
+      borderColor:'rgb(245,193,66)',
+      backgroundColor: (ctx2) => {
+        const chart = ctx2.chart;
+        const {ctx:c, chartArea} = chart;
+        if (!chartArea) return 'rgba(245,193,66,0.1)';
+        const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        g.addColorStop(0, 'rgba(245,193,66,0.4)');
+        g.addColorStop(1, 'rgba(245,193,66,0.05)');
+        return g;
+      },
+      borderWidth: 2,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      tension: 0.3,
+      fill: true,
+    }]},
+    options:{
+      ...CHART_DEFAULTS,
+      plugins:{
+        ...CHART_DEFAULTS.plugins,
+        legend:{ display:false },
+        tooltip:{
+          ...CHART_DEFAULTS.plugins.tooltip,
+          callbacks:{ label: ctx => 'MSTR: ' + ctx.raw.y.toLocaleString() + ' BTC' }
+        }
+      },
+      scales:{
+        x: {
+          type: 'time',
+          time: { unit: 'month', displayFormats: { month: 'yyyy-MM' } },
+          grid: { color: '#21262d' },
+          ticks: { color: '#8b949e', maxTicksLimit: 12 }
+        },
+        y:{ grid:{ color:'#21262d' }, ticks:{ color:'#8b949e', callback: v => (v/1000).toFixed(0) + 'K' } }
+      }
+    }
+  });
 })();
 
 // ========== ETF 持仓 ==========
@@ -549,6 +475,80 @@ const dates = RAW_DATA.map(d => d.date);
       <div class="info-note">${item.note}</div>
     </div>
   `).join('');
+
+  // ----- BTC ETF 持仓月走势（现货 ETF 累计持仓，来源：CoinGlass/BitMEX Research 月末值）-----
+  const etfHistory = [
+    { x:'2024-01-31', y:220000 },
+    { x:'2024-02-29', y:346000 },
+    { x:'2024-03-31', y:500000 },
+    { x:'2024-04-30', y:497000 },
+    { x:'2024-05-31', y:542000 },
+    { x:'2024-06-30', y:530000 },
+    { x:'2024-07-31', y:561000 },
+    { x:'2024-08-31', y:559000 },
+    { x:'2024-09-30', y:594000 },
+    { x:'2024-10-31', y:687000 },
+    { x:'2024-11-30', y:756000 },
+    { x:'2024-12-31', y:782000 },
+    { x:'2025-01-31', y:802000 },
+    { x:'2025-02-28', y:874000 },
+    { x:'2025-03-31', y:921000 },
+    { x:'2025-04-30', y:964000 },
+    { x:'2025-05-31', y:1011000 },
+    { x:'2025-06-30', y:1058000 },
+    { x:'2025-07-31', y:1102000 },
+    { x:'2025-08-31', y:1138000 },
+    { x:'2025-09-30', y:1175000 },
+    { x:'2025-10-31', y:1210000 },
+    { x:'2025-11-30', y:1240000 },
+    { x:'2025-12-31', y:1258000 },
+    { x:'2026-01-31', y:1265000 },
+    { x:'2026-02-28', y:1265000 },
+    { x:'2026-03-31', y:1272000 },
+    { x:'2026-04-20', y: d.etf_btc },
+  ];
+  new Chart(document.getElementById('chart-etf-btc').getContext('2d'), {
+    type:'line',
+    data:{ datasets:[{
+      label:'ETF 持仓 BTC',
+      data: etfHistory,
+      borderColor:'rgb(88,166,255)',
+      backgroundColor: (ctx2) => {
+        const chart = ctx2.chart;
+        const {ctx:c, chartArea} = chart;
+        if (!chartArea) return 'rgba(88,166,255,0.1)';
+        const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        g.addColorStop(0, 'rgba(88,166,255,0.4)');
+        g.addColorStop(1, 'rgba(88,166,255,0.05)');
+        return g;
+      },
+      borderWidth: 2,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      tension: 0.3,
+      fill: true,
+    }]},
+    options:{
+      ...CHART_DEFAULTS,
+      plugins:{
+        ...CHART_DEFAULTS.plugins,
+        legend:{ display:false },
+        tooltip:{
+          ...CHART_DEFAULTS.plugins.tooltip,
+          callbacks:{ label: ctx => 'ETF: ' + (ctx.raw.y/1e6).toFixed(3) + 'M BTC' }
+        }
+      },
+      scales:{
+        x: {
+          type: 'time',
+          time: { unit: 'month', displayFormats: { month: 'yyyy-MM' } },
+          grid: { color: '#21262d' },
+          ticks: { color: '#8b949e', maxTicksLimit: 12 }
+        },
+        y:{ grid:{ color:'#21262d' }, ticks:{ color:'#8b949e', callback: v => (v/1e6).toFixed(2) + 'M' } }
+      }
+    }
+  });
 })();
 
 // ========== USDC 走势 ==========
