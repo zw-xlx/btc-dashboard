@@ -414,25 +414,19 @@ const dates = RAW_DATA.map(d => d.date);
   ];
   new Chart(document.getElementById('chart-mstr-btc').getContext('2d'), {
     type:'line',
-    data:{ datasets:[{
-      label:'MSTR 持仓 BTC',
-      data: mstrHistory,
-      borderColor:'rgb(245,193,66)',
-      backgroundColor: (ctx2) => {
-        const chart = ctx2.chart;
-        const {ctx:c, chartArea} = chart;
-        if (!chartArea) return 'rgba(245,193,66,0.1)';
-        const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-        g.addColorStop(0, 'rgba(245,193,66,0.4)');
-        g.addColorStop(1, 'rgba(245,193,66,0.05)');
-        return g;
-      },
-      borderWidth: 2,
-      pointRadius: 3,
-      pointHoverRadius: 5,
-      tension: 0.3,
-      fill: true,
-    }]},
+    data:{
+      labels: mstrHistory.map(d => d.x),
+      datasets:[{
+        label:'MSTR 持仓 BTC',
+        data: mstrHistory.map(d => d.y),
+        borderColor:'rgb(245,193,66)',
+        backgroundColor: 'rgba(245,193,66,0.15)',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.2,
+        fill: true,
+      }]},
     options:{
       ...CHART_DEFAULTS,
       plugins:{
@@ -445,10 +439,9 @@ const dates = RAW_DATA.map(d => d.date);
       },
       scales:{
         x: {
-          type: 'time',
-          time: { unit: 'month', displayFormats: { month: 'yyyy-MM' } },
+          type: 'category',
           grid: { color: '#21262d' },
-          ticks: { color: '#8b949e', maxTicksLimit: 12 }
+          ticks: { color: '#8b949e', maxTicksLimit: 14, autoSkip: true }
         },
         y:{ grid:{ color:'#21262d' }, ticks:{ color:'#8b949e', callback: v => (v/1000).toFixed(0) + 'K' } }
       }
@@ -509,25 +502,19 @@ const dates = RAW_DATA.map(d => d.date);
   ];
   new Chart(document.getElementById('chart-etf-btc').getContext('2d'), {
     type:'line',
-    data:{ datasets:[{
-      label:'ETF 持仓 BTC',
-      data: etfHistory,
-      borderColor:'rgb(88,166,255)',
-      backgroundColor: (ctx2) => {
-        const chart = ctx2.chart;
-        const {ctx:c, chartArea} = chart;
-        if (!chartArea) return 'rgba(88,166,255,0.1)';
-        const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-        g.addColorStop(0, 'rgba(88,166,255,0.4)');
-        g.addColorStop(1, 'rgba(88,166,255,0.05)');
-        return g;
-      },
-      borderWidth: 2,
-      pointRadius: 3,
-      pointHoverRadius: 5,
-      tension: 0.3,
-      fill: true,
-    }]},
+    data:{
+      labels: etfHistory.map(d => d.x),
+      datasets:[{
+        label:'ETF 持仓 BTC',
+        data: etfHistory.map(d => d.y),
+        borderColor:'rgb(88,166,255)',
+        backgroundColor: 'rgba(88,166,255,0.15)',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.2,
+        fill: true,
+      }]},
     options:{
       ...CHART_DEFAULTS,
       plugins:{
@@ -540,10 +527,9 @@ const dates = RAW_DATA.map(d => d.date);
       },
       scales:{
         x: {
-          type: 'time',
-          time: { unit: 'month', displayFormats: { month: 'yyyy-MM' } },
+          type: 'category',
           grid: { color: '#21262d' },
-          ticks: { color: '#8b949e', maxTicksLimit: 12 }
+          ticks: { color: '#8b949e', maxTicksLimit: 14, autoSkip: true }
         },
         y:{ grid:{ color:'#21262d' }, ticks:{ color:'#8b949e', callback: v => (v/1e6).toFixed(2) + 'M' } }
       }
