@@ -564,13 +564,14 @@ const dates = RAW_DATA.map(d => d.date);
 
   const cur = RAW_DATA[RAW_DATA.length - 1];
   const prev30 = RAW_DATA[Math.max(0, RAW_DATA.length - 31)];
-  const first = RAW_DATA[0];
   const mom = ((cur.usdc_mcap - prev30.usdc_mcap) / prev30.usdc_mcap * 100).toFixed(2);
-  const growth90 = ((cur.usdc_mcap - first.usdc_mcap) / first.usdc_mcap * 100).toFixed(2);
+  // 同比：去年同月（usdcHistory 第一条 2025-04 对应当前 2026-04）
+  const yoyBase = usdcHistory[0].y;
+  const yoy = ((cur.usdc_mcap - yoyBase) / yoyBase * 100).toFixed(2);
   const usdcItems = [
     { icon:'💵', label:'当前发行量', value: '$' + (cur.usdc_mcap / 1e9).toFixed(1) + 'B', cls:'blue', note:'流通市值' },
     { icon:'📅', label:'环比（月）', value: (mom >= 0 ? '+' : '') + mom + '%', cls: mom >= 0 ? 'good' : 'bad', note:'30天增长' },
-    { icon:'📈', label:'90天增长', value: (growth90 >= 0 ? '+' : '') + growth90 + '%', cls: growth90 >= 0 ? 'good' : 'bad', note:'数据起始至今' },
+    { icon:'📈', label:'同比（年）', value: (yoy >= 0 ? '+' : '') + yoy + '%', cls: yoy >= 0 ? 'good' : 'bad', note:'vs 去年同期' },
   ];
   document.getElementById('cards-usdc').innerHTML = usdcItems.map(item => `
     <div class="info-card">
