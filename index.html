@@ -246,7 +246,7 @@ const RAW_DATA = [
   { date:"2026-04-19", btc_price:75603, drawdown:-40.0, fear:27, fear_label:"恐惧", ahr999:0.432, mvrv:1.42, wma200:59936, mstr_btc:780897, mstr_price:166.52, mstr_mnav:1.27, mstr_debt_ratio:0.14, mstr_cost_basis:75577, etf_btc:1324365, usdc_mcap:78490540084 },
   { date:"2026-04-20", btc_price:74516, drawdown:-40.9, fear:29, fear_label:"恐惧", ahr999:0.4204, mvrv:1.40, wma200:60192, mstr_btc:815061, mstr_price:166.52, mstr_mnav:1.29, mstr_debt_ratio:0.14, mstr_cost_basis:75527, etf_btc:1343685, usdc_mcap:78040462427 },
   { date:"2026-04-21", btc_price:75797, drawdown:-39.9, fear:33, fear_label:"恐惧", ahr999:0.4357, mvrv:1.36, wma200:60201, mstr_btc:815061, mstr_price:170.81, mstr_mnav:1.28, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1358062, usdc_mcap:78305170823 },
-  { date:"2026-04-22", btc_price:76301, drawdown:-39.5, fear:32, fear_label:"恐惧", ahr999:0.4423, mvrv:1.40, wma200:60204, mstr_btc:815061, mstr_price:163.97, mstr_mnav:1.23, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1331005, usdc_mcap:77894776069 },
+  { date:"2026-04-22", btc_price:76301, drawdown:-39.5, fear:32, fear_label:"恐惧", ahr999:0.4423, mvrv:1.40, wma200:60204, mstr_btc:815061, mstr_price:163.97, mstr_shares:348992000, mstr_mnav:1.23, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1331005, usdc_mcap:77894776069 },
 ];
 // ========== 数据结束 ==========
 
@@ -363,14 +363,21 @@ const dates = RAW_DATA.map(d => d.date);
   const costBasis = d.mstr_cost_basis || 75577;
   const pnlPct = (d.btc_price / costBasis - 1) * 100;
   const pnlUsd = (d.btc_price - costBasis) * d.mstr_btc;
+  // MSTR 股本（历史数据缺失则用当前值 fallback）
+  const mstrShares = d.mstr_shares || 348992000;
+  const mstrMcap = mstrShares * d.mstr_price;  // MSTR 市值
+  const btcValue = d.mstr_btc * d.btc_price;   // BTC 持仓市值
+  const leverage = btcValue / mstrMcap;        // 杠杆倍数（BTC市值 / 股票市值）
   const mstrItems = [
     { icon:'₿', label:'BTC 持仓', value: fmtK(d.mstr_btc) + ' BTC', cls:'gold', note:'累计持仓' },
+    { icon:'💰', label:'BTC 市值', value: '$' + (btcValue / 1e9).toFixed(2) + 'B', cls:'gold', note:'持仓 × BTC价' },
     { icon:'💵', label:'MSTR 股价', value: '$' + d.mstr_price, cls:'blue', note:'纳斯达克' },
+    { icon:'🏢', label:'MSTR 市值', value: '$' + (mstrMcap / 1e9).toFixed(2) + 'B', cls:'blue', note:'股本 × 股价' },
+    { icon:'⚡', label:'杠杆倍数', value: leverage.toFixed(2) + 'x', cls: leverage > 1.2 ? 'good' : leverage > 0.8 ? 'warn' : 'bad', note:'BTC市值/股票市值' },
     { icon:'📊', label:'mNAV 倍数', value: d.mstr_mnav + 'x', cls: d.mstr_mnav > 2 ? 'bad' : d.mstr_mnav > 1.5 ? 'warn' : 'good', note:'溢价倍数' },
     { icon:'⚖️', label:'负债率', value: (d.mstr_debt_ratio * 100).toFixed(0) + '%', cls: d.mstr_debt_ratio > 0.3 ? 'bad' : d.mstr_debt_ratio > 0.2 ? 'warn' : 'good', note:'可转债/BTC资产' },
     { icon:'🎯', label:'均价成本', value: '$' + costBasis.toLocaleString(), cls:'blue', note:'累计买入均价' },
     { icon: pnlPct >= 0 ? '📈' : '📉', label:'浮动盈亏', value: (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%', cls: pnlPct >= 0 ? 'good' : 'bad', note: (pnlUsd >= 0 ? '+$' : '-$') + fmtK(Math.abs(pnlUsd) / 1e9) + 'B' },
-    { icon:'💰', label:'BTC 价值', value: '$' + fmtK(d.mstr_btc * d.btc_price / 1e6) + 'M', cls:'gold', note:'持仓市值' },
     { icon:'📊', label:'占总供应', value: (d.mstr_btc / 21000000 * 100).toFixed(2) + '%', cls:'warn', note:'21M 上限' },
   ];
 
