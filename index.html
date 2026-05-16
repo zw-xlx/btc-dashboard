@@ -314,6 +314,13 @@ function mvrvClass(v) {
   document.getElementById('overview-date').textContent =
     '最新数据：' + d.date + ' · 共 ' + RAW_DATA.length + ' 天历史数据';
 
+  // 减半倒计时（下次区块 1,050,000，预计 2028-04-12）
+  const halvingDate = new Date('2028-04-12T00:00:00+08:00');
+  const halvingDays = Math.max(0, Math.ceil((halvingDate - new Date()) / 86400000));
+  const halvingDateStr = halvingDate.getFullYear() + '-' + 
+    String(halvingDate.getMonth()+1).padStart(2,'0') + '-' + 
+    String(halvingDate.getDate()).padStart(2,'0');
+
   const items = [
     { label:'BTC 价格', value:'$' + fmt(d.btc_price), cls:'gold', sub:'ATH $126,080' },
     { label:'距ATH跌幅', value: d.drawdown + '%', cls: 'bad', sub: '历史最高 $126,080' },
@@ -321,6 +328,7 @@ function mvrvClass(v) {
     { label:'AHR999', value: d.ahr999, cls: ahr999Class(d.ahr999), sub: d.ahr999 < 0.45 ? '抄底区' : d.ahr999 <= 1.2 ? '定投区' : '观望区' },
     { label:'MVRV', value: d.mvrv, cls: mvrvClass(d.mvrv), sub: d.mvrv < 1 ? '低估' : d.mvrv < 2.5 ? '合理' : '高估' },
     { label:'200WMA', value: '$' + fmtK(d.wma200), cls: 'neutral', sub: '当前/' + (d.btc_price/d.wma200*100).toFixed(0) + '%均线' },
+    { label:'减半倒计时', value: halvingDays + ' 天', cls:'gold', sub: halvingDateStr },
   ];
 
   const container = document.getElementById('stats-overview');
