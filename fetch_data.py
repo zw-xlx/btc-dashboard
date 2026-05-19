@@ -93,6 +93,40 @@ def get_usdc():
     d = fetch_json('https://api.coingecko.com/api/v3/coins/usd-coin/market_chart?vs_currency=usd&days=365&interval=daily')
     return round(d['market_caps'][-1][1])
 
+def update_etf_history(html_content, today_str, current_etf_btc):
+    """检测 ETF 持仓变化，每周一固定追加点（或变化 >5K BTC 时立即追加）"""
+    if not current_etf_btc:
+        return html_content, 0
+
+    m = re.search(r'const etfHistory = \[(.*?)\];', html_content, re.DOTALL)
+    if not m:
+        log('etf_history: 找不到 etfHistory 数组')
+        return html_content, 0
+
+    arr_str = m.group(1)
+    points = re.findall(r"x:'(\d{4}-\d{2}-\d{2})',\s*y:\s*(\d+)", arr_str)
+    if not points:
+        return html_content, 0
+    last_date, last_etf = points[-1][0], int(points[-1][1])
+
+    if today_str == last_date:
+        log(f'etf_history: {today_str} 已存在')
+        return html_content, 0
+
+    # 触发条件：周一 OR 变化 >=5K BTC
+    is_monday = dt.datetime.strptime(today_str, '%Y-%m-%d').weekday() == 0
+    delta = current_etf_btc - last_etf
+    if not is_monday and abs(delta) < 5000:
+        log(f'etf_history: 非周一且变化小（{delta:,} BTC），跳过')
+        return html_content, 0
+
+    new_arr = arr_str.rstrip() + f"\n    {{ x:'{today_str}', y:{current_etf_btc} }},\n  "
+    new_html = html_content.replace(m.group(0), f'const etfHistory = [{new_arr}];')
+    sign = '+' if delta > 0 else ''
+    log(f'etf_history: 追加 {today_str}:{current_etf_btc:,} ({sign}{delta:,} BTC)')
+    return new_html, 1
+
+
 def update_mstr_history(html_content, today_str, current_btc_holding):
     """检测 MSTR 持仓变化，触发增持时追加点到 mstrHistory 数组。
     策略：每周一比较一次（避免重复），或当持仓发生 >=10 BTC 变化时立即追加。
@@ -133,9 +167,32 @@ def update_mstr_history(html_content, today_str, current_btc_holding):
 
 
 def get_etf_btc(btc_price):
-    """ETF 持仓 BTC 数。CoinGlass 403 时降级估算（跳过不写）"""
+    """ETF 持仓 BTC 数（SoSoValue 口径，含期货 ETF 等）。
+    多源降级：bitcointreasuries（11 只美国现货 ETF + 80K 修正）→ SoSoValue（备用）
+    """
+    # 1. bitcointreasuries.net（稳定可用，11 只美国现货 ETF 合计）
     try:
-        # SoSoValue 官方 API
+        req = urllib.request.Request('https://www.bitcointreasuries.net', headers=UA)
+        with urllib.request.urlopen(req, timeout=15) as r:
+            html_raw = r.read().decode('utf-8', errors='ignore')
+        us_etfs = ['IBIT', 'FBTC', 'BITB', 'ARKB', 'BTCO', 'EZBC', 'BRRR', 'BTCW', 'HODL', 'GBTC', 'DEFI']
+        total = 0
+        n = 0
+        for sym in us_etfs:
+            m = re.search(r'"' + sym + r'"[^"]{0,600}?btc_balance:([\d.]+)', html_raw)
+            if m and float(m.group(1)) > 100:
+                total += float(m.group(1))
+                n += 1
+        if n >= 8:
+            # +80K 修正：贴合历史 RAW_DATA 的 SoSoValue 口径（含期货 ETF + 加拿大/欧洲等）
+            adjusted = round(total + 80000)
+            log(f'ETF bitcointreasuries: {n} ETFs, raw {total:,.0f}, +80K adjusted = {adjusted:,}')
+            return adjusted
+    except Exception as e:
+        log('ETF bitcointreasuries failed:', e)
+
+    # 2. SoSoValue 官方 API（备用，目前 403）
+    try:
         d = fetch_json(
             'https://gw.sosovalue.com/openapi/v2/etf/historicalInflowChart?type=us-btc-spot',
             headers={'Referer': 'https://sosovalue.com/'}
@@ -144,7 +201,7 @@ def get_etf_btc(btc_price):
         return round(latest['totalNetAssets'] / btc_price)
     except Exception as e:
         log('ETF SoSoValue failed:', e)
-        return None
+    return None
 
 # ============ 主流程 ============
 def main():
@@ -284,6 +341,9 @@ def main():
 
     # ===== 同步 MSTR 持仓走势图 =====
     new_html, mstr_added = update_mstr_history(new_html, today_str, data.get('mstr_btc'))
+
+    # ===== 同步 ETF 持仓走势图 =====
+    new_html, etf_added = update_etf_history(new_html, today_str, data.get('etf_btc'))
 
     with open(INDEX_FILE, 'w', encoding='utf-8') as f:
         f.write(new_html)
