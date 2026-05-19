@@ -93,6 +93,45 @@ def get_usdc():
     d = fetch_json('https://api.coingecko.com/api/v3/coins/usd-coin/market_chart?vs_currency=usd&days=365&interval=daily')
     return round(d['market_caps'][-1][1])
 
+def update_mstr_history(html_content, today_str, current_btc_holding):
+    """检测 MSTR 持仓变化，触发增持时追加点到 mstrHistory 数组。
+    策略：每周一比较一次（避免重复），或当持仓发生 >=10 BTC 变化时立即追加。
+    """
+    if not current_btc_holding:
+        return html_content, 0
+
+    # 提取现有 mstrHistory 数组
+    m = re.search(r'const mstrHistory = \[(.*?)\];', html_content, re.DOTALL)
+    if not m:
+        log('mstr_history: 找不到 mstrHistory 数组')
+        return html_content, 0
+
+    arr_str = m.group(1)
+    # 拿到最后一条记录的日期 + 持仓
+    points = re.findall(r"x:'(\d{4}-\d{2}-\d{2})',\s*y:(\d+)", arr_str)
+    if not points:
+        return html_content, 0
+    last_date, last_holding = points[-1][0], int(points[-1][1])
+
+    # 已存在该日期则跳过
+    if today_str == last_date:
+        log(f'mstr_history: {today_str} 已存在')
+        return html_content, 0
+
+    # 持仓未变化（差 <10 BTC，可能是抖动）则跳过
+    delta = current_btc_holding - last_holding
+    if abs(delta) < 10:
+        log(f'mstr_history: 持仓基本不变 ({last_holding}→{current_btc_holding})，跳过')
+        return html_content, 0
+
+    # 追加新点
+    new_arr = arr_str.rstrip() + f"\n    {{ x:'{today_str}', y:{current_btc_holding} }},\n  "
+    new_html = html_content.replace(m.group(0), f'const mstrHistory = [{new_arr}];')
+    sign = '+' if delta > 0 else ''
+    log(f'mstr_history: 追加 {today_str}:{current_btc_holding} ({sign}{delta:,} BTC)')
+    return new_html, 1
+
+
 def get_etf_btc(btc_price):
     """ETF 持仓 BTC 数。CoinGlass 403 时降级估算（跳过不写）"""
     try:
@@ -241,9 +280,13 @@ def main():
         return 2
 
     new_html = html[:m.end(1)] + '\n' + new_row + html[m.end(1):]
+    log(f'✅ {today_str} 已追加到 RAW_DATA')
+
+    # ===== 同步 MSTR 持仓走势图 =====
+    new_html, mstr_added = update_mstr_history(new_html, today_str, data.get('mstr_btc'))
+
     with open(INDEX_FILE, 'w', encoding='utf-8') as f:
         f.write(new_html)
-    log(f'✅ {today_str} 已追加到 RAW_DATA')
 
     # 语法检查
     check = subprocess.run(
