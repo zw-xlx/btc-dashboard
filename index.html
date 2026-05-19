@@ -120,6 +120,11 @@ footer{text-align:center;color:#484f58;font-size:0.72em;padding:20px 16px 30px}
     <h3>📈 MSTR 持仓 BTC 走势（月度）</h3>
     <div class="chart-wrap"><canvas id="chart-mstr-btc"></canvas></div>
   </div>
+  <div class="chart-box">
+    <h3>📊 MSTR 周度增持 + 资金来源（来源：SEC 8-K）</h3>
+    <div class="chart-wrap"><canvas id="chart-mstr-buys"></canvas></div>
+    <p class="section-sub" style="margin-top:8px;font-size:12px;">柱子高度 = 增持 BTC 数量；颜色分段表示当周 ATM 募资构成（STRC 优先股 / MSTR 普通股）；数字在柱顶为该周融资总额（$M）</p>
+  </div>
 </div>
 <hr class="divider">
 
@@ -496,6 +501,122 @@ const dates = RAW_DATA.map(d => d.date);
         y:{ grid:{ color:'#21262d' }, ticks:{ color:'#8b949e', callback: v => (v/1000).toFixed(0) + 'K' } }
       }
     }
+  });
+
+  // ----- MSTR 周度增持柱状图（资金来源分段，来源：SEC 8-K filings）-----
+  // 数据按周维护：每次新增持后从 8-K 第一页 "ATM Update" 表读取对应 STRC/MSTR/STRF/STRK/STRD Net Proceeds
+  // 资金分配 = Net Proceeds 比例 × 当周 BTC 购买金额（认为按比例使用）
+  const mstrBuys = [
+    // x: 增持披露日, btc: 增持数量, total_m: 当周买币总额($M), funding: { STRC: $M, MSTR: $M, STRF/STRK/STRD: $M }
+    { x:'3/16', btc:22337, total_m:1568, funding:{STRC:0, MSTR:0, OTHER:1568} }, // 此前期间用 STRK/STRF 等组合，未单独 parse
+    { x:'3/23', btc:1031,  total_m:77,   funding:{STRC:0, MSTR:77,  OTHER:0} },
+    { x:'4/06', btc:4871,  total_m:330,  funding:{STRC:330, MSTR:0, OTHER:0} },  // 见 4/06 8-K，STRC 主导
+    { x:'4/13', btc:13927, total_m:1001, funding:{STRC:1001, MSTR:0, OTHER:0} },
+    { x:'4/20', btc:34164, total_m:2542, funding:{STRC:2176, MSTR:366, OTHER:0} },
+    { x:'4/27', btc:3273,  total_m:255,  funding:{STRC:0, MSTR:255, OTHER:0} },
+    { x:'5/11', btc:535,   total_m:43,   funding:{STRC:0, MSTR:43,  OTHER:0} },
+    { x:'5/18', btc:24869, total_m:2014, funding:{STRC:1949, MSTR:65, OTHER:0} },
+  ];
+  // 把每周 funding 按总比例换算为 BTC 数量（堆叠柱子按 BTC 计）
+  function splitBtc(b) {
+    const sum = b.funding.STRC + b.funding.MSTR + (b.funding.OTHER || 0);
+    if (!sum) return { strc: 0, mstr: b.btc, other: 0 };
+    return {
+      strc:  b.btc * b.funding.STRC / sum,
+      mstr:  b.btc * b.funding.MSTR / sum,
+      other: b.btc * (b.funding.OTHER || 0) / sum,
+    };
+  }
+  const splits = mstrBuys.map(splitBtc);
+
+  new Chart(document.getElementById('chart-mstr-buys').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels: mstrBuys.map(d => d.x),
+      datasets:[
+        {
+          label:'STRC 优先股募资',
+          data: splits.map(s => s.strc),
+          backgroundColor:'rgba(88,166,255,0.85)',
+          borderColor:'rgb(88,166,255)',
+          borderWidth: 1,
+        },
+        {
+          label:'MSTR 普通股 ATM',
+          data: splits.map(s => s.mstr),
+          backgroundColor:'rgba(245,193,66,0.85)',
+          borderColor:'rgb(245,193,66)',
+          borderWidth: 1,
+        },
+        {
+          label:'其他（STRK/STRF/STRD）',
+          data: splits.map(s => s.other),
+          backgroundColor:'rgba(155,155,155,0.6)',
+          borderColor:'rgb(155,155,155)',
+          borderWidth: 1,
+        },
+      ]
+    },
+    options:{
+      ...CHART_DEFAULTS,
+      plugins:{
+        ...CHART_DEFAULTS.plugins,
+        legend:{ display:true, labels:{ color:'#e6edf3', font:{ size:11 } } },
+        tooltip:{
+          ...CHART_DEFAULTS.plugins.tooltip,
+          callbacks:{
+            title: items => mstrBuys[items[0].dataIndex].x + ' (披露日)',
+            label: ctx => {
+              const b = mstrBuys[ctx.dataIndex];
+              const v = ctx.parsed.y;
+              const ds = ctx.dataset.label;
+              return ds + ': ≈ ' + Math.round(v).toLocaleString() + ' BTC';
+            },
+            footer: items => {
+              const b = mstrBuys[items[0].dataIndex];
+              return [
+                '总增持: ' + b.btc.toLocaleString() + ' BTC',
+                '总投入: $' + b.total_m.toLocaleString() + 'M',
+                'STRC: $' + b.funding.STRC + 'M',
+                'MSTR: $' + b.funding.MSTR + 'M',
+                (b.funding.OTHER ? 'OTHER: $' + b.funding.OTHER + 'M' : ''),
+              ].filter(Boolean);
+            },
+          }
+        },
+        // 顶部数字标签（自定义插件）
+        datalabels: false, // 不依赖外部插件，用 afterDatasetsDraw 手画
+      },
+      scales:{
+        x:{
+          stacked: true,
+          grid:{ color:'#21262d' },
+          ticks:{ color:'#8b949e' },
+        },
+        y:{
+          stacked: true,
+          grid:{ color:'#21262d' },
+          ticks:{ color:'#8b949e', callback: v => (v/1000).toFixed(0) + 'K' },
+          title:{ display:true, text:'BTC 增持数量', color:'#8b949e' }
+        }
+      }
+    },
+    plugins:[{
+      id:'topLabel',
+      afterDatasetsDraw(chart) {
+        const { ctx, scales:{ x, y } } = chart;
+        ctx.save();
+        ctx.fillStyle = '#e6edf3';
+        ctx.font = 'bold 11px system-ui';
+        ctx.textAlign = 'center';
+        mstrBuys.forEach((b, i) => {
+          const xPos = x.getPixelForValue(i);
+          const yPos = y.getPixelForValue(b.btc) - 6;
+          ctx.fillText('$' + b.total_m + 'M', xPos, yPos);
+        });
+        ctx.restore();
+      }
+    }]
   });
 })();
 
