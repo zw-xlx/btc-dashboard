@@ -298,6 +298,7 @@ const RAW_DATA = [
   { date:"2026-06-05", btc_price:63177, btc_change:1.6, drawdown:-49.9, fear:12, fear_label:"极度恐惧", ahr999:0.3173, mvrv:1.2, wma200:61826, mstr_btc:843706, mstr_price:129.37, mstr_shares:352527000, mstr_mnav:1.26, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1344308, usdc_mcap:75624992685 },
   { date:"2026-06-06", btc_price:60956, btc_change:-3.49, drawdown:-51.7, fear:12, fear_label:"极度恐惧", ahr999:0.2958, mvrv:1.2, wma200:61815, mstr_btc:843706, mstr_price:120.44, mstr_shares:352527000, mstr_mnav:1.24, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1344308, usdc_mcap:75538691129 },
   { date:"2026-06-07", btc_price:61499, btc_change:0.9, drawdown:-51.2, fear:12, fear_label:"极度恐惧", ahr999:0.3013, mvrv:1.2, wma200:61818, mstr_btc:843706, mstr_price:120.44, mstr_shares:352527000, mstr_mnav:1.23, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1344308, usdc_mcap:75427555812 },
+  { date:"2026-06-08", btc_price:63023, btc_change:2.46, drawdown:-50.0, fear:8, fear_label:"极度恐惧", ahr999:0.3166, mvrv:1.2, wma200:62020, mstr_btc:843706, mstr_price:120.44, mstr_shares:352527000, mstr_mnav:1.2, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1344308, usdc_mcap:75676022574 },
 ];
 // ========== 数据结束 ==========
 
@@ -699,6 +700,7 @@ const dates = RAW_DATA.map(d => d.date);
     { x:'2026-05-21', y:1344308 },
     { x:'2026-05-25', y:1344308 },
     { x:'2026-06-01', y:1344308 },
+    { x:'2026-06-08', y:1344308 },
   ];
   // 把 RAW_DATA 末尾最新值作为最末点（前端拼接）
   const _etfLastInArr = etfHistory[etfHistory.length - 1].y;
