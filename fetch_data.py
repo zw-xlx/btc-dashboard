@@ -191,10 +191,10 @@ def update_mstr_history(html_content, today_str, current_btc_holding):
 
 
 def get_etf_btc(btc_price):
-    """ETF 持仓 BTC 数（SoSoValue 口径，含期货 ETF 等）。
-    真实口径：bitcointreasuries（11 只美国现货 ETF 合计，无水分）→ SoSoValue（备用）
+    """ETF 持仓 BTC 数（bitcointreasuries "US ETFs & Exchanges" 网页口径 ≈ 135 万）。
+    含 18 个实体：14 只现货ETF + River交易所 + BITW/GDLC多币种基金 + MSBT信托。
+    与用户在 bitcointreasuries.net 网页看到的 Total 一致，避免口径歧义。
     """
-    # 1. bitcointreasuries.net（稳定可用，11 只美国现货 ETF 合计）
     for _attempt in range(3):
         try:
             req = urllib.request.Request('https://bitcointreasuries.net/', headers=UA)
@@ -206,20 +206,41 @@ def get_etf_btc(btc_price):
             time.sleep(2)
             html_raw = ''
     try:
-        us_etfs = ['IBIT', 'FBTC', 'BITB', 'ARKB', 'BTCO', 'EZBC', 'BRRR', 'BTCW', 'HODL', 'GBTC', 'DEFI']
+        # 通用抓法：每个 symbol 就近取其后第一个 btc_balance
+        sym_pos = [(m.group(1), m.start()) for m in re.finditer(r'symbol:"([^"]+)"', html_raw)]
+        bal_pos = [(float(m.group(1)), m.start()) for m in re.finditer(r'btc_balance:([\d.]+)', html_raw)]
+        vals = {}
+        for sym, sp in sym_pos:
+            for b, bp in bal_pos:
+                if bp > sp:
+                    if sym not in vals:
+                        vals[sym] = b
+                    break
+
+        # US ETFs & Exchanges 分组的 ticker 实体（有 symbol 的 17 个）
+        group = ['IBIT', 'FBTC', 'GBTC', 'BTC', 'BITB', 'ARKB', 'HODL', 'BITW',
+                 'BTCO', 'BRRR', 'EZBC', 'GDLC', 'BTCW', 'MSBT', 'OBTC', 'DEFI', 'BITA']
         total = 0
         n = 0
-        for sym in us_etfs:
-            # 结构: symbol:"IBIT",type:"..."},...,btc_balance:811290.746
-            m = re.search(r'symbol:"' + sym + r'",type:[^}]*?\}[^}]*?btc_balance:([\d.]+)', html_raw)
-            if m and float(m.group(1)) > 100:
-                total += float(m.group(1))
+        for sym in group:
+            if sym in vals and vals[sym] > 50:
+                total += vals[sym]
                 n += 1
-        if n >= 8:
-            # 真实口径：11 只美国现货 ETF 合计，不加任何修正
+
+        # River (Exchange) 无 symbol，用 name 匹配就近的 btc_balance
+        mr = re.search(r'name:"River \(Exchange\)"[^}]*?\}.*?btc_balance:([\d.]+)', html_raw)
+        if not mr:
+            mr = re.search(r'slug:"river-exchange".*?btc_balance:([\d.]+)', html_raw)
+        if mr:
+            total += float(mr.group(1))
+            n += 1
+
+        if n >= 12:
             real = round(total)
-            log(f'ETF bitcointreasuries: {n} ETFs, 真实合计 = {real:,} BTC')
+            log(f'ETF bitcointreasuries (网页US ETF+Exchange口径): {n} 实体, 合计 = {real:,} BTC')
             return real
+        else:
+            log(f'ETF 命中实体不足 ({n}), 不可信')
     except Exception as e:
         log('ETF bitcointreasuries failed:', e)
 
