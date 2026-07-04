@@ -90,8 +90,32 @@ def get_mstr(btc_price):
     }
 
 def get_usdc():
-    d = fetch_json('https://api.coingecko.com/api/v3/coins/usd-coin/market_chart?vs_currency=usd&days=365&interval=daily')
-    return round(d['market_caps'][-1][1])
+    """USDC 流通市值。多源 + 重试，返回整数美元。"""
+    # 源1: CoinGecko coins/usd-coin（稳定，直接给 market_cap）
+    for _a in range(3):
+        try:
+            d = fetch_json('https://api.coingecko.com/api/v3/coins/usd-coin?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false')
+            mc = d['market_data']['market_cap']['usd']
+            if mc and mc > 1e9:
+                return round(mc)
+        except Exception as e:
+            log(f'USDC coingecko retry {_a}:', e)
+            time.sleep(2)
+    # 源2: CoinGecko simple/price（带市值）
+    try:
+        d = fetch_json('https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=usd&include_market_cap=true')
+        mc = d['usd-coin']['usd_market_cap']
+        if mc and mc > 1e9:
+            return round(mc)
+    except Exception as e:
+        log('USDC simple/price failed:', e)
+    # 源3: CoinGecko market_chart（旧源，偶发 SSL）
+    try:
+        d = fetch_json('https://api.coingecko.com/api/v3/coins/usd-coin/market_chart?vs_currency=usd&days=2&interval=daily')
+        return round(d['market_caps'][-1][1])
+    except Exception as e:
+        log('USDC market_chart failed:', e)
+    return None
 
 def update_etf_history(html_content, today_str, current_etf_btc):
     """检测 ETF 持仓变化，每周一固定追加点（或变化 >5K BTC 时立即追加）"""
@@ -171,15 +195,23 @@ def get_etf_btc(btc_price):
     多源降级：bitcointreasuries（11 只美国现货 ETF + 80K 修正）→ SoSoValue（备用）
     """
     # 1. bitcointreasuries.net（稳定可用，11 只美国现货 ETF 合计）
+    for _attempt in range(3):
+        try:
+            req = urllib.request.Request('https://bitcointreasuries.net/', headers=UA)
+            with urllib.request.urlopen(req, timeout=25) as r:
+                html_raw = r.read().decode('utf-8', errors='ignore')
+            break
+        except Exception as e:
+            log(f'ETF bitcointreasuries retry {_attempt}:', e)
+            time.sleep(2)
+            html_raw = ''
     try:
-        req = urllib.request.Request('https://www.bitcointreasuries.net', headers=UA)
-        with urllib.request.urlopen(req, timeout=15) as r:
-            html_raw = r.read().decode('utf-8', errors='ignore')
         us_etfs = ['IBIT', 'FBTC', 'BITB', 'ARKB', 'BTCO', 'EZBC', 'BRRR', 'BTCW', 'HODL', 'GBTC', 'DEFI']
         total = 0
         n = 0
         for sym in us_etfs:
-            m = re.search(r'"' + sym + r'"[^"]{0,600}?btc_balance:([\d.]+)', html_raw)
+            # 结构: symbol:"IBIT",type:"..."},...,btc_balance:811290.746
+            m = re.search(r'symbol:"' + sym + r'",type:[^}]*?\}[^}]*?btc_balance:([\d.]+)', html_raw)
             if m and float(m.group(1)) > 100:
                 total += float(m.group(1))
                 n += 1
@@ -263,10 +295,21 @@ def main():
 
     try:
         time.sleep(1)
-        data['usdc_mcap'] = get_usdc()
-        log(f"USDC ${data['usdc_mcap']/1e9:.2f}B")
+        usdc = get_usdc()
+        if usdc:
+            data['usdc_mcap'] = usdc
+            log(f"USDC ${usdc/1e9:.2f}B")
+        else:
+            m_prev = re.findall(r'usdc_mcap:(\d+)', html)
+            if m_prev:
+                data['usdc_mcap'] = int(m_prev[-1])
+                log(f"USDC fallback (前一天): ${data['usdc_mcap']/1e9:.2f}B")
     except Exception as e:
         errors.append(f'USDC: {e}')
+        m_prev = re.findall(r'usdc_mcap:(\d+)', html)
+        if m_prev:
+            data['usdc_mcap'] = int(m_prev[-1])
+            log(f"USDC fallback (前一天): ${data['usdc_mcap']/1e9:.2f}B")
 
     try:
         if 'btc_price' in data:
