@@ -192,7 +192,7 @@ def update_mstr_history(html_content, today_str, current_btc_holding):
 
 def get_etf_btc(btc_price):
     """ETF 持仓 BTC 数（SoSoValue 口径，含期货 ETF 等）。
-    多源降级：bitcointreasuries（11 只美国现货 ETF + 80K 修正）→ SoSoValue（备用）
+    真实口径：bitcointreasuries（11 只美国现货 ETF 合计，无水分）→ SoSoValue（备用）
     """
     # 1. bitcointreasuries.net（稳定可用，11 只美国现货 ETF 合计）
     for _attempt in range(3):
@@ -216,10 +216,10 @@ def get_etf_btc(btc_price):
                 total += float(m.group(1))
                 n += 1
         if n >= 8:
-            # +80K 修正：贴合历史 RAW_DATA 的 SoSoValue 口径（含期货 ETF + 加拿大/欧洲等）
-            adjusted = round(total + 80000)
-            log(f'ETF bitcointreasuries: {n} ETFs, raw {total:,.0f}, +80K adjusted = {adjusted:,}')
-            return adjusted
+            # 真实口径：11 只美国现货 ETF 合计，不加任何修正
+            real = round(total)
+            log(f'ETF bitcointreasuries: {n} ETFs, 真实合计 = {real:,} BTC')
+            return real
     except Exception as e:
         log('ETF bitcointreasuries failed:', e)
 
