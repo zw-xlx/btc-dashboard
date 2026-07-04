@@ -321,7 +321,7 @@ const RAW_DATA = [
   { date:"2026-07-01", btc_price:58605, btc_change:-2.01, drawdown:-53.5, fear:11, fear_label:"极度恐惧", mvrv:1.19, wma200:62613, mstr_btc:847363, mstr_price:86.93, mstr_shares:371614000, mstr_mnav:1.05, mstr_debt_ratio:0.14, mstr_cost_basis:75527, etf_btc:1344308, usdc_mcap:73365865018 },
   { date:"2026-07-02", btc_price:60052, btc_change:2.47, drawdown:-52.4, fear:19, fear_label:"极度恐惧", mvrv:1.19, mstr_btc:847363, mstr_price:93.39, mstr_shares:371614000, mstr_mnav:1.07, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1344308, usdc_mcap:73165641483 },
   { date:"2026-07-03", btc_price:61478, btc_change:2.38, drawdown:-51.2, fear:21, fear_label:"极度恐惧", wma200:62627, mstr_btc:847363, mstr_price:100.77, mstr_shares:371614000, mstr_mnav:1.1, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1344308, usdc_mcap:73219980395 },
-  { date:"2026-07-04", btc_price:62473, btc_change:1.54, drawdown:-50.4, fear:22, fear_label:"极度恐惧", mvrv:1.19, wma200:62632, mstr_btc:847363, mstr_price:100.77, mstr_shares:371614000, mstr_mnav:1.08, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1344308 },
+  { date:"2026-07-04", btc_price:62446, btc_change:1.3, drawdown:-50.5, fear:22, fear_label:"极度恐惧", mvrv:1.19, wma200:62632, mstr_btc:847363, mstr_price:100.77, mstr_shares:371614000, mstr_mnav:1.08, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1358011, usdc_mcap:72974197818 },
 ];
 // ========== 数据结束 ==========
 
@@ -670,7 +670,12 @@ const dates = RAW_DATA.map(d => d.date);
 
 // ========== ETF 持仓 ==========
 (function renderEtf() {
-  const d = RAW_DATA[RAW_DATA.length - 1];
+  let d = RAW_DATA[RAW_DATA.length - 1];
+  if (d.etf_btc == null || isNaN(d.etf_btc)) {
+    for (let i = RAW_DATA.length - 1; i >= 0; i--) {
+      if (RAW_DATA[i].etf_btc != null && !isNaN(RAW_DATA[i].etf_btc)) { d = RAW_DATA[i]; break; }
+    }
+  }
   document.getElementById('etf-date').textContent = '最新数据：' + d.date;
 
   const etfItems = [
@@ -729,6 +734,7 @@ const dates = RAW_DATA.map(d => d.date);
     { x:'2026-06-08', y:1344308 },
     { x:'2026-06-22', y:1344308 },
     { x:'2026-06-29', y:1344308 },
+    { x:'2026-07-04', y:1358011 },
   ];
   // 把 RAW_DATA 末尾最新值作为最末点（前端拼接）
   const _etfLastInArr = etfHistory[etfHistory.length - 1].y;
@@ -797,8 +803,16 @@ const dates = RAW_DATA.map(d => d.date);
     { x:'2026-04-20', y: RAW_DATA[RAW_DATA.length - 1].usdc_mcap },
   ];
 
-  const cur = RAW_DATA[RAW_DATA.length - 1];
-  const prev30 = RAW_DATA[Math.max(0, RAW_DATA.length - 31)];
+  // 兜底：往回找最近一条有 usdc_mcap 的记录，避免最后一天缺字段导致 NaN
+  function lastWith(key) {
+    for (let i = RAW_DATA.length - 1; i >= 0; i--) {
+      if (RAW_DATA[i][key] != null && !isNaN(RAW_DATA[i][key])) return RAW_DATA[i];
+    }
+    return RAW_DATA[RAW_DATA.length - 1];
+  }
+  const cur = lastWith('usdc_mcap');
+  const curIdx = RAW_DATA.indexOf(cur);
+  const prev30 = RAW_DATA[Math.max(0, curIdx - 30)];
   const mom = ((cur.usdc_mcap - prev30.usdc_mcap) / prev30.usdc_mcap * 100).toFixed(2);
   // 同比：去年同月（usdcHistory 第一条 2025-04 对应当前 2026-04）
   const yoyBase = usdcHistory[0].y;
