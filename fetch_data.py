@@ -53,8 +53,14 @@ def get_ahr999(btc_price):
     btc_birthday = date(2009, 1, 3)
     age = (date.today() - btc_birthday).days
     fitted = 10 ** (5.84 * math.log10(age) - 17.01)
-    d = fetch_json('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=200')
-    closes = [float(k[4]) for k in d]
+    # 优先 Binance，451 时降级 OKX（同为 200 日日线收盘）
+    try:
+        d = fetch_json('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=200')
+        closes = [float(k[4]) for k in d]
+    except Exception as e:
+        log('AHR Binance failed:', e, '→ OKX')
+        d = fetch_json('https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar=1D&limit=200')
+        closes = [float(k[4]) for k in d['data']]
     cost_200d = sum(closes) / len(closes)
     return round((btc_price / cost_200d) * (btc_price / fitted), 4)
 

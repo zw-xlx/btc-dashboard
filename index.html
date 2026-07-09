@@ -325,8 +325,8 @@ const RAW_DATA = [
   { date:"2026-07-05", btc_price:62751, btc_change:0.44, drawdown:-50.2, fear:23, fear_label:"极度恐惧", mvrv:1.18, wma200:62633, mstr_btc:847363, mstr_price:100.77, mstr_shares:371614000, mstr_mnav:1.07, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1375080, usdc_mcap:72950331555 },
   { date:"2026-07-06", btc_price:63426, btc_change:1.08, drawdown:-49.7, fear:24, fear_label:"极度恐惧", mvrv:1.19, wma200:62842, mstr_btc:847363, mstr_price:100.77, mstr_shares:371614000, mstr_mnav:1.06, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1375080, usdc_mcap:72934883392 },
   { date:"2026-07-07", btc_price:63794, btc_change:0.58, drawdown:-49.4, fear:27, fear_label:"恐惧", mvrv:1.2, wma200:62844, mstr_btc:843775, mstr_price:100.77, mstr_shares:371614000, mstr_mnav:1.06, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1375080, usdc_mcap:73136643863 },
-  { date:"2026-07-08", btc_price:62877, btc_change:-1.45, drawdown:-50.1, fear:20, fear_label:"极度恐惧", wma200:62839, mstr_btc:843775, mstr_price:97.36, mstr_shares:371614000, mstr_mnav:1.05, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1375080, usdc_mcap:73281374023 },
-  { date:"2026-07-09", btc_price:61744, btc_change:-1.95, drawdown:-51.0, fear:22, fear_label:"极度恐惧", mvrv:1.2, wma200:62834, mstr_btc:843775, mstr_price:93.87, mstr_shares:371614000, mstr_mnav:1.05, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1375080, usdc_mcap:73179108835 },
+  { date:"2026-07-08", btc_price:62877, btc_change:-1.45, drawdown:-50.1, fear:20, fear_label:"极度恐惧", ahr999:0.3232, mvrv:1.2, wma200:62839, mstr_btc:843775, mstr_price:97.36, mstr_shares:371614000, mstr_mnav:1.05, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1375080, usdc_mcap:73281374023 },
+  { date:"2026-07-09", btc_price:61744, btc_change:-1.95, drawdown:-51.0, fear:22, fear_label:"极度恐惧", ahr999:0.3116, mvrv:1.2, wma200:62834, mstr_btc:843775, mstr_price:93.87, mstr_shares:371614000, mstr_mnav:1.05, mstr_debt_ratio:0.13, mstr_cost_basis:75527, etf_btc:1375080, usdc_mcap:73179108835 },
 ];
 // ========== 数据结束 ==========
 
@@ -366,7 +366,21 @@ function mvrvClass(v) {
 
 // ========== 今日概览 ==========
 (function renderOverview() {
-  const d = RAW_DATA[RAW_DATA.length - 1];
+  // 兜底：某字段最后一天缺失时，向前取最近一条有值的记录，杜绝 undefined/NaN
+  function val(key) {
+    for (let i = RAW_DATA.length - 1; i >= 0; i--) {
+      const v = RAW_DATA[i][key];
+      if (v != null && !(typeof v === 'number' && isNaN(v))) return v;
+    }
+    return RAW_DATA[RAW_DATA.length - 1][key];
+  }
+  const last = RAW_DATA[RAW_DATA.length - 1];
+  const d = {
+    date: last.date,
+    btc_price: val('btc_price'), drawdown: val('drawdown'),
+    fear: val('fear'), fear_label: val('fear_label'),
+    ahr999: val('ahr999'), mvrv: val('mvrv'), wma200: val('wma200'),
+  };
   document.getElementById('overview-date').textContent =
     '最新数据：' + d.date + ' · 共 ' + RAW_DATA.length + ' 天历史数据';
 
