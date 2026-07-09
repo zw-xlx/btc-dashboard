@@ -807,7 +807,17 @@ const dates = RAW_DATA.map(d => d.date);
 
 // ========== USDC 走势 ==========
 (function renderUsdc() {
-  // 月度历史（CoinGecko 真实数据, 每月最后一条）
+  // 兜底：往回找最近一条有 usdc_mcap 的记录，避免最后一天缺字段导致 NaN
+  function lastWith(key) {
+    for (let i = RAW_DATA.length - 1; i >= 0; i--) {
+      if (RAW_DATA[i][key] != null && !isNaN(RAW_DATA[i][key])) return RAW_DATA[i];
+    }
+    return RAW_DATA[RAW_DATA.length - 1];
+  }
+  const cur = lastWith('usdc_mcap');
+
+  // 月度历史：2025 年的月末点是历史静态值（RAW_DATA 无那么早的数据），
+  // 2026 年起从 RAW_DATA 动态取每月最后一天，最后追加当前实时点 → 自动跟上，永不停更
   const usdcHistory = [
     { x:'2025-04-30', y:62142665088 },
     { x:'2025-05-31', y:61040432498 },
@@ -818,25 +828,31 @@ const dates = RAW_DATA.map(d => d.date);
     { x:'2025-10-31', y:75950060281 },
     { x:'2025-11-30', y:76543535518 },
     { x:'2025-12-31', y:76008223428 },
-    { x:'2026-01-31', y:70048084221 },
-    { x:'2026-02-28', y:75227319202 },
-    { x:'2026-03-31', y:77437649563 },
-    { x:'2026-04-20', y: RAW_DATA[RAW_DATA.length - 1].usdc_mcap },
   ];
-
-  // 兜底：往回找最近一条有 usdc_mcap 的记录，避免最后一天缺字段导致 NaN
-  function lastWith(key) {
-    for (let i = RAW_DATA.length - 1; i >= 0; i--) {
-      if (RAW_DATA[i][key] != null && !isNaN(RAW_DATA[i][key])) return RAW_DATA[i];
+  // 从 RAW_DATA 动态生成 2026 年各月末点（取该月最后一条有 usdc_mcap 的记录）
+  (function() {
+    const byMonth = {};
+    for (const r of RAW_DATA) {
+      if (r.usdc_mcap == null || isNaN(r.usdc_mcap)) continue;
+      const m = r.date.slice(0, 7); // YYYY-MM
+      byMonth[m] = r; // 覆盖 → 最后保留每月最后一条
     }
-    return RAW_DATA[RAW_DATA.length - 1];
-  }
-  const cur = lastWith('usdc_mcap');
+    const curMonth = cur.date.slice(0, 7);
+    Object.keys(byMonth).sort().forEach(m => {
+      if (m === curMonth) return; // 当前月用实时点，避免重复
+      usdcHistory.push({ x: byMonth[m].date, y: byMonth[m].usdc_mcap });
+    });
+    // 追加当前实时点
+    usdcHistory.push({ x: cur.date, y: cur.usdc_mcap });
+  })();
   const curIdx = RAW_DATA.indexOf(cur);
   const prev30 = RAW_DATA[Math.max(0, curIdx - 30)];
   const mom = ((cur.usdc_mcap - prev30.usdc_mcap) / prev30.usdc_mcap * 100).toFixed(2);
-  // 同比：去年同月（usdcHistory 第一条 2025-04 对应当前 2026-04）
-  const yoyBase = usdcHistory[0].y;
+  // 同比：当前月 vs 去年同月（动态匹配 usdcHistory 里去年同月的点）
+  const curMM = cur.date.slice(5, 7);          // 当前月份 MM
+  const lastYearYM = (parseInt(cur.date.slice(0,4)) - 1) + '-' + curMM; // 去年同月 YYYY-MM
+  let yoyPoint = usdcHistory.find(p => p.x.slice(0,7) === lastYearYM);
+  const yoyBase = yoyPoint ? yoyPoint.y : usdcHistory[0].y;
   const yoy = ((cur.usdc_mcap - yoyBase) / yoyBase * 100).toFixed(2);
   const usdcItems = [
     { icon:'💵', label:'当前发行量', value: '$' + (cur.usdc_mcap / 1e9).toFixed(1) + 'B', cls:'blue', note:'流通市值' },
