@@ -645,6 +645,23 @@ const dates = RAW_DATA.map(d => d.date);
     { x:'4/27', btc:3273,  funding:{STRC:0,    MSTR:255}  },
     { x:'5/11', btc:535,   funding:{STRC:0,    MSTR:43}   },
     { x:'5/18', btc:24869, funding:{STRC:1949, MSTR:84}   },
+    // ↓ 以下为 SEC 8-K（CIK 1050446）自动补齐，2026 下半年优先股(STRF/STRC/STRK/STRD)当周多为 $ -，
+    //   仅 MSTR 普通股 ATM 在募资；STRC 段=优先股合计。btc:0 表示当周只融资未增持或净卖出（8-K 实录，非编造）。
+    { x:'5/26', btc:0,     funding:{STRC:0,    MSTR:0}    },
+    { x:'6/01', btc:0,     funding:{STRC:0,    MSTR:128.3}},
+    { x:'6/08', btc:1550,  funding:{STRC:0,    MSTR:181}  },
+    { x:'6/15', btc:1587,  funding:{STRC:0,    MSTR:209}  },
+    { x:'6/22', btc:520,   funding:{STRC:0,    MSTR:335.5}},
+    { x:'6/29', btc:0,     funding:{STRC:0,    MSTR:1152.4}},
+    { x:'7/06', btc:0,     funding:{STRC:0,    MSTR:0}    },
+    { x:'7/13', btc:0,     funding:{STRC:0,    MSTR:466.7}},
+    { x:'7/20', btc:0,     funding:{STRC:0,    MSTR:263.5}},
+    { x:'7/27', btc:0,     funding:{STRC:0,    MSTR:544.5}},
+    { x:'8/03', btc:0,     funding:{STRC:0,    MSTR:290.6}},
+    { x:'8/10', btc:0,     funding:{STRC:0,    MSTR:653.1}},
+    { x:'8/17', btc:0,     funding:{STRC:0,    MSTR:333.7}},
+    { x:'8/24', btc:0,     funding:{STRC:0,    MSTR:2006.5}},
+    { x:'8/31', btc:4603,  funding:{STRC:0,    MSTR:602.8}},
   ];
   // 把每周 funding 按总比例换算为 BTC 数量（堆叠柱子按 BTC 计）
   function splitBtc(b) {

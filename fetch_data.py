@@ -12,6 +12,7 @@ import urllib.error
 import math
 import time
 import re
+import html as _html
 import subprocess
 import sys
 from datetime import date, timezone, timedelta
@@ -81,19 +82,66 @@ def get_wma200():
         closes = [float(k[4]) for k in d['data']]
         return round(sum(closes) / len(closes))
 
+def get_mstr_btc_from_treasuries():
+    """降级源：从 bitcointreasuries.net 页面抓 MSTR (Strategy) 的 BTC 持仓。
+    页面结构含 name:"Strategy" 或 symbol:"MSTR" ... btc_balance:847363 之类。
+    """
+    for _a in range(3):
+        try:
+            req = urllib.request.Request('https://bitcointreasuries.net/', headers=UA)
+            with urllib.request.urlopen(req, timeout=25) as r:
+                raw = r.read().decode('utf-8', errors='ignore')
+            # MSTR/Strategy 是最大持仓公司（2026-09 新格式：holdings:[{asset:"BTC",balance:N}]）
+            mm = re.search(r'symbol:"MSTR".{0,400}?holdings:\[\{asset:"BTC",balance:([\d.]+)', raw, re.DOTALL)
+            if not mm:
+                mm = re.search(r'name:"(?:Strategy|MicroStrategy)".{0,400}?holdings:\[\{asset:"BTC",balance:([\d.]+)', raw, re.DOTALL)
+            if mm:
+                return round(float(mm.group(1)))
+        except Exception as e:
+            log(f'MSTR treasuries retry {_a}:', e)
+            time.sleep(2)
+    return None
+
+
 def get_mstr(btc_price):
-    d = fetch_json('https://looknode-proxy.corms-cushier-0l.workers.dev/mnav', headers={'Referer': 'https://fuckbtc.com/'})
-    m = d['mstr']
-    mcap = m['shares'] * m['stock_price']
-    ev = mcap + m['debt'] + m['pref'] - m['cash']
-    nav = m['btc_holdings'] * btc_price
-    return {
-        'mstr_btc': m['btc_holdings'],
-        'mstr_price': round(m['stock_price'], 2),
-        'mstr_shares': m['shares'],
-        'mstr_mnav': round(ev / nav, 2) if nav else 0,
-        'mstr_debt_ratio': round(m['debt'] / nav, 2) if nav else 0,
-    }
+    """MSTR 持仓 + mNAV。fuckbtc 代理退化后做字段级容错：
+    代理只给 stock_price 时，btc_holdings 从 bitcointreasuries 降级抓取；
+    缺 debt/pref/cash 则 mNAV/负债率返回 None（主流程用前一天真实值回填）。
+    """
+    result = {}
+    m = {}
+    try:
+        d = fetch_json('https://looknode-proxy.corms-cushier-0l.workers.dev/mnav', headers={'Referer': 'https://fuckbtc.com/'})
+        m = d.get('mstr', {}) or {}
+    except Exception as e:
+        log('MSTR fuckbtc代理失败:', e)
+
+    # 股价（代理有则用）
+    if m.get('stock_price'):
+        result['mstr_price'] = round(m['stock_price'], 2)
+
+    # BTC 持仓：优先代理，缺失则从 bitcointreasuries 降级
+    btc_holdings = m.get('btc_holdings')
+    if not btc_holdings:
+        btc_holdings = get_mstr_btc_from_treasuries()
+        if btc_holdings:
+            log(f'MSTR 持仓走降级源(bitcointreasuries): {btc_holdings:,}')
+    if btc_holdings:
+        result['mstr_btc'] = btc_holdings
+
+    if m.get('shares'):
+        result['mstr_shares'] = m['shares']
+
+    # mNAV/负债率：需要 shares+debt+pref+cash+btc_holdings 全齐才算，否则留空由主流程回填
+    need = ('shares', 'stock_price', 'debt', 'pref', 'cash', 'btc_holdings')
+    if all(m.get(k) is not None for k in need) and btc_price:
+        mcap = m['shares'] * m['stock_price']
+        ev = mcap + m['debt'] + m['pref'] - m['cash']
+        nav = m['btc_holdings'] * btc_price
+        if nav:
+            result['mstr_mnav'] = round(ev / nav, 2)
+            result['mstr_debt_ratio'] = round(m['debt'] / nav, 2)
+    return result
 
 def get_usdc():
     """USDC 流通市值。多源 + 重试，返回整数美元。"""
@@ -196,6 +244,187 @@ def update_mstr_history(html_content, today_str, current_btc_holding):
     return new_html, 1
 
 
+# ============ MSTR 周度 8-K（SEC EDGAR 官方源） ============
+# 数据源：SEC EDGAR，MSTR 现名 Strategy Inc，CIK 1050446。免费官方，无需 key。
+# 每周 8-K 的 "ATM Update" 表给出各证券当周 Net Proceeds（百万美元），
+# "BTC Update" 表/段给出当周增持 BTC。2026 下半年主力融资为 MSTR 普通股 ATM，
+# 优先股（STRF/STRC/STRK/STRD）当周多为 $ -，合并计入 funding.STRC（"优先股"段）。
+SEC_UA = 'zw-web3 research zw@example.com'
+SEC_CIK = '1050446'
+
+
+def _sec_fetch(url, tries=5):
+    """带官方 UA + 重试的 SEC 请求（SEC 强制要求 UA 含邮箱，间隔≥0.3s）。"""
+    last = None
+    for _a in range(tries):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': SEC_UA})
+            return urllib.request.urlopen(req, timeout=30).read().decode('utf-8', 'replace')
+        except Exception as e:
+            last = e
+            time.sleep(1.0)
+    raise last
+
+
+def _sec_clean(raw):
+    """8-K HTML → 纯文本：先解码实体，再去标签，再压空白。"""
+    t = _html.unescape(raw)
+    t = re.sub(r'<[^>]+>', ' ', t)
+    t = re.sub(r'\s+', ' ', t)
+    return t
+
+
+def _sec_num(s):
+    s = s.replace(',', '').strip()
+    if s in ('-', '\u2013', '\u2014', ''):
+        return 0.0
+    return float(s)
+
+
+def _parse_8k_atm(txt):
+    """解析 "ATM Update" 表，返回各证券当周 Net Proceeds（百万美元）。
+    行格式：`{SYM} Stock {SharesSold} $ {Notional} $ {NetProceeds}[ (n)] $ {Available}`。
+    未发行的字段是 `$ -`（记 0）。"""
+    res = {}
+    i = txt.find('ATM Update')
+    if i < 0:
+        return res
+    seg = txt[i:i + 2600]
+    for sym in ['STRF', 'STRC', 'STRK', 'STRD', 'MSTR']:
+        m = re.search(
+            sym + r' Stock\s+([\d,\.\-\u2013\u2014]+)\s*\$\s*([\d,\.\-\u2013\u2014]+)'
+            r'\s*\$\s*([\d,\.\-\u2013\u2014]+)(?:\s*\(\d\))?\s*\$', seg)
+        res[sym] = _sec_num(m.group(3)) if m else 0.0
+    return res
+
+
+def _parse_8k_btc(txt):
+    """解析当周增持 BTC + 总持仓。仅计"增持"（净卖出/未买入的周记 0）。
+    返回 (weekly_btc_purchased or None, holdings or None)。
+    容错：拿不到明确数值返回 None（调用方跳过或标注）。"""
+    i = txt.find('BTC Update')
+    if i < 0:
+        # 无 BTC Update 段：可能是纯散文披露"did not purchase any bitcoin"
+        mh = re.search(r'holds approximately ([\d,]+) bitcoin', txt)
+        if re.search(r'did not (?:sell|purchase|acquire)', txt) and mh:
+            return (0.0, _sec_num(mh.group(1)))
+        return (None, None)
+    seg = txt[i:i + 1600]
+    header = seg[:340]
+    # 段内散文式"did not purchase any bitcoin"（如 5/26 这类全零周）
+    if re.search(r'did not (?:sell any shares.*?did not purchase|purchase any bitcoin)', seg):
+        mh = re.search(r'holds approximately ([\d,]+) bitcoin', seg) or \
+             re.search(r'Aggregate BTC Holdings[^\d]*?([\d,]{5,})', seg)
+        return (0.0, _sec_num(mh.group(1)) if mh else None)
+    week_sold_only = ('BTC Sold' in header) and ('BTC Purchased' not in header)
+    # 合并布局：周表 + 持仓表拼接，锚定持仓表头再取数据行
+    # ...Average Purchase Price (2) {v1}[ (1)] $ {v2} $ {v3} {holdings}[ $ ...]
+    m = re.search(
+        r'Aggregate BTC Holdings.*?Average Purchase Price\s*\(2\)\s+'
+        r'([\d,\.\-\u2013\u2014]+)\s*(?:\(\d\))?\s*\$\s*([\d,\.\-\u2013\u2014]+)'
+        r'\s*\$\s*([\d,\.\-\u2013\u2014]+)\s+([\d,]{5,})', seg)
+    if m:
+        weekly = _sec_num(m.group(1))
+        holdings = _sec_num(m.group(4))
+        return (0.0 if week_sold_only else max(0.0, weekly), holdings)
+    # 分表布局（月/季末特殊格式）：持仓单独一块
+    mh = re.search(r'Aggregate BTC Holdings[^\d]*?([\d,]{5,})', seg)
+    holdings = _sec_num(mh.group(1)) if mh else None
+    if week_sold_only:
+        return (0.0, holdings)
+    m2 = re.search(r'Average (?:Purchase|Sale) Price\s*\(2\)\s+([\d,\.\-\u2013\u2014]+)', seg)
+    if m2:
+        return (max(0.0, _sec_num(m2.group(1))), holdings)
+    return (None, holdings)
+
+
+def get_mstr_weekly_8k(limit=20):
+    """从 SEC EDGAR 拉最近 N 份 MSTR 周度 8-K，解析每周
+    {x:'M/DD'(披露日), btc:增持BTC, funding:{STRC:优先股$M, MSTR:普通股$M}}。
+    STRF/STRC/STRK/STRD 合并进 funding.STRC（"优先股"段），MSTR 普通股单列。
+    仅返回能明确解析出 btc 的周（btc 为 None 的非周度/结构化 8-K 跳过）。
+    结果按披露日升序。"""
+    sub = json.loads(_sec_fetch(f'https://data.sec.gov/submissions/CIK{int(SEC_CIK):010d}.json'))
+    r = sub['filings']['recent']
+    rows = list(zip(r['form'], r['filingDate'], r['accessionNumber'], r['primaryDocument']))
+    out = []
+    seen = 0
+    for form, fdate, acc, doc in rows:
+        if form != '8-K' or not doc.startswith('mstr-'):
+            continue
+        seen += 1
+        if seen > limit:
+            break
+        accn = acc.replace('-', '')
+        url = f'https://www.sec.gov/Archives/edgar/data/{int(SEC_CIK)}/{accn}/{doc}'
+        try:
+            txt = _sec_clean(_sec_fetch(url))
+        except Exception as e:
+            log(f'8k fetch fail {fdate}:', e)
+            continue
+        time.sleep(0.4)
+        btc, _hold = _parse_8k_btc(txt)
+        atm = _parse_8k_atm(txt)
+        # 跳过非周度/结构化 8-K（既无 BTC 也无 ATM 数据）
+        if btc is None and not atm:
+            continue
+        if btc is None:
+            # 有 ATM 但拿不到 BTC 数（罕见）：容错跳过该周柱子，避免塞假数
+            log(f'8k {fdate}: 拿不到 BTC 数，跳过该周')
+            continue
+        mm, dd = fdate.split('-')[1], fdate.split('-')[2]
+        x = f'{int(mm)}/{dd}'
+        strc = round(atm.get('STRF', 0) + atm.get('STRC', 0) +
+                     atm.get('STRK', 0) + atm.get('STRD', 0), 1)
+        mstr = round(atm.get('MSTR', 0), 1)
+        out.append({'x': x, 'btc': int(round(btc)), 'STRC': strc, 'MSTR': mstr})
+    out.reverse()  # 披露日升序
+    return out
+
+
+def update_mstr_weekly(html_content):
+    """检测新的一周 8-K，把新周追加到 index.html 里的 mstrBuys 数组。
+    以 x（披露日 M/DD）去重，只追加数组末尾之后的新周。真实数据，无假 fallback。"""
+    m = re.search(r'(const mstrBuys = \[)(.*?)(\n  \];)', html_content, re.DOTALL)
+    if not m:
+        log('mstr_weekly: 找不到 mstrBuys 数组')
+        return html_content, 0
+    arr_str = m.group(2)
+    xs = re.findall(r"x:'([^']+)'", arr_str)
+    existing = set(xs)
+
+    def _mmdd_key(x):
+        mm, dd = x.split('/')
+        return int(mm) * 100 + int(dd)
+
+    # 数组末尾（当前最新）披露日 → 只追加严格更晚的新周，保持时间顺序，
+    # 不回填数组中间缺失的旧周（避免乱序）。
+    last_key = _mmdd_key(xs[-1]) if xs else 0
+    try:
+        weeks = get_mstr_weekly_8k(limit=25)
+    except Exception as e:
+        log('mstr_weekly: EDGAR 拉取失败:', e)
+        return html_content, 0
+    new_lines = []
+    for w in weeks:
+        if w['x'] in existing:
+            continue
+        if _mmdd_key(w['x']) <= last_key:
+            continue  # 早于/等于当前末尾的旧周不回填，避免乱序
+        new_lines.append(
+            f"    {{ x:'{w['x']}', btc:{w['btc']}, "
+            f"funding:{{STRC:{w['STRC']}, MSTR:{w['MSTR']}}} }},")
+    if not new_lines:
+        log('mstr_weekly: 无新周')
+        return html_content, 0
+    insert = '\n' + '\n'.join(new_lines)
+    new_arr = arr_str.rstrip() + insert + '\n  '
+    new_html = html_content.replace(m.group(0), m.group(1) + new_arr + m.group(3))
+    log(f'mstr_weekly: 追加 {len(new_lines)} 周: ' +
+        ', '.join(l.split("x:'")[1].split("'")[0] for l in new_lines))
+    return new_html, len(new_lines)
+
+
 def get_etf_btc(btc_price):
     """ETF 持仓 BTC 数（bitcointreasuries "US ETFs & Exchanges" 网页口径 ≈ 135 万）。
     含 18 个实体：14 只现货ETF + River交易所 + BITW/GDLC多币种基金 + MSBT信托。
@@ -212,33 +441,27 @@ def get_etf_btc(btc_price):
             time.sleep(2)
             html_raw = ''
     try:
-        # 通用抓法：每个 symbol 就近取其后第一个 btc_balance
-        sym_pos = [(m.group(1), m.start()) for m in re.finditer(r'symbol:"([^"]+)"', html_raw)]
-        bal_pos = [(float(m.group(1)), m.start()) for m in re.finditer(r'btc_balance:([\d.]+)', html_raw)]
-        vals = {}
-        for sym, sp in sym_pos:
-            for b, bp in bal_pos:
-                if bp > sp:
-                    if sym not in vals:
-                        vals[sym] = b
-                    break
+        # 2026-09 页面改版：数值从 btc_balance 移到 holdings:[{asset:"BTC",balance:N}]
+        # 按 symbol 就近（400字内）取其 holdings 里的 BTC balance
+        def grab_sym(sym):
+            m = re.search(r'symbol:"' + re.escape(sym) + r'".{0,400}?holdings:\[\{asset:"BTC",balance:([\d.]+)', html_raw, re.DOTALL)
+            return round(float(m.group(1))) if m else None
 
-        # US ETFs & Exchanges 分组的 ticker 实体（有 symbol 的 17 个）
+        # US ETFs & Exchanges 分组的 ticker 实体
         group = ['IBIT', 'FBTC', 'GBTC', 'BTC', 'BITB', 'ARKB', 'HODL', 'BITW',
                  'BTCO', 'BRRR', 'EZBC', 'GDLC', 'BTCW', 'MSBT', 'OBTC', 'DEFI', 'BITA']
         total = 0
         n = 0
         for sym in group:
-            if sym in vals and vals[sym] > 50:
-                total += vals[sym]
+            v = grab_sym(sym)
+            if v and v > 50:
+                total += v
                 n += 1
 
-        # River (Exchange) 无 symbol，用 name 匹配就近的 btc_balance
-        mr = re.search(r'name:"River \(Exchange\)"[^}]*?\}.*?btc_balance:([\d.]+)', html_raw)
-        if not mr:
-            mr = re.search(r'slug:"river-exchange".*?btc_balance:([\d.]+)', html_raw)
+        # River (Exchange) 无 symbol，用 name 匹配就近的 holdings BTC balance
+        mr = re.search(r'name:"River \(Exchange\)".{0,400}?holdings:\[\{asset:"BTC",balance:([\d.]+)', html_raw, re.DOTALL)
         if mr:
-            total += float(mr.group(1))
+            total += round(float(mr.group(1)))
             n += 1
 
         if n >= 12:
@@ -316,9 +539,17 @@ def main():
     try:
         mstr = get_mstr(data.get('btc_price', 80000))
         data.update(mstr)
-        log(f"MSTR {mstr['mstr_btc']:,} BTC @ ${mstr['mstr_price']}, mNAV {mstr['mstr_mnav']}x")
+        log(f"MSTR {mstr.get('mstr_btc','?')} BTC @ ${mstr.get('mstr_price','?')}, mNAV {mstr.get('mstr_mnav','?')}x")
     except Exception as e:
         errors.append(f'MSTR: {e}')
+    # MSTR 各字段缺失时用前一天真实值回填（防止单源退化导致整行缺数据）
+    for _f in ('mstr_btc', 'mstr_price', 'mstr_shares', 'mstr_mnav', 'mstr_debt_ratio'):
+        if data.get(_f) is None:
+            _mp = re.findall(rf'{_f}:([\d.]+)', html)
+            if _mp:
+                _val = _mp[-1]
+                data[_f] = float(_val) if '.' in _val else int(_val)
+                log(f"{_f} fallback (前一天): {data[_f]}")
 
     try:
         time.sleep(1)
@@ -353,13 +584,33 @@ def main():
     except Exception as e:
         errors.append(f'ETF: {e}')
 
-    # 必须字段检查
-    required = ['btc_price', 'fear', 'mstr_btc']
+    # 必须字段检查：只有 BTC 价格是硬性的（连价格都没有才中止）。
+    # 其余字段（fear/mstr/etf/usdc 等）缺失一律用前一天真实值回填，绝不因单源失败中止整行落库。
+    required = ['btc_price']
     missing = [k for k in required if k not in data]
     if missing:
-        log(f'❌ 缺少关键字段: {missing}')
+        log(f'❌ 缺少核心字段（BTC价格），中止: {missing}')
         log(f'errors: {errors}')
         return 1
+
+    # 其余字段统一前一天回填兜底（fear/fear_label/ahr999/mvrv/wma200/etf_btc/usdc_mcap）
+    _num_fallback = {
+        'fear': r'fear:(\d+)', 'ahr999': r'ahr999:([\d.]+)', 'mvrv': r'mvrv:([\d.]+)',
+        'wma200': r'wma200:(\d+)', 'etf_btc': r'etf_btc:(\d+)', 'usdc_mcap': r'usdc_mcap:(\d+)',
+    }
+    for _f, _pat in _num_fallback.items():
+        if data.get(_f) is None:
+            _mp = re.findall(_pat, html)
+            if _mp:
+                _v = _mp[-1]
+                data[_f] = float(_v) if '.' in _v else int(_v)
+                log(f"{_f} fallback (前一天): {data[_f]}")
+    if data.get('fear_label') is None:
+        _fl = re.findall(r'fear_label:"([^"]+)"', html)
+        if _fl:
+            data['fear_label'] = _fl[-1]
+    if errors:
+        log(f'⚠️ 本次降级/告警: {errors}')
 
     # 组装 RAW_DATA 行（按顺序）
     fields = [
@@ -411,6 +662,13 @@ def main():
 
     # ===== 同步 MSTR 持仓走势图 =====
     new_html, mstr_added = update_mstr_history(new_html, today_str, data.get('mstr_btc'))
+
+    # ===== 同步 MSTR 周度增持+资金来源柱状图（SEC 8-K）=====
+    try:
+        new_html, mstr_wk_added = update_mstr_weekly(new_html)
+    except Exception as e:
+        log('mstr_weekly 更新异常（不阻断主流程）:', e)
+        mstr_wk_added = 0
 
     # ===== 同步 ETF 持仓走势图 =====
     new_html, etf_added = update_etf_history(new_html, today_str, data.get('etf_btc'))
