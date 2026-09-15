@@ -388,6 +388,7 @@ const RAW_DATA = [
   { date:"2026-09-12", btc_price:77297, btc_change:0.5, drawdown:-38.7, fear:63, fear_label:"贪婪", ahr999:0.4879, mvrv:1.23, wma200:65177, mstr_btc:845050, mstr_price:130.97, mstr_shares:420483000, mstr_mnav:1.12, mstr_debt_ratio:0.1, mstr_cost_basis:75527, etf_btc:1311421, usdc_mcap:74336851395 },
   { date:"2026-09-13", btc_price:76732, btc_change:-0.76, drawdown:-39.1, fear:61, fear_label:"贪婪", ahr999:0.48, mvrv:1.23, wma200:65174, mstr_btc:845050, mstr_price:130.97, mstr_shares:420483000, mstr_mnav:1.12, mstr_debt_ratio:0.1, mstr_cost_basis:75527, etf_btc:1311421, usdc_mcap:74260250208 },
   { date:"2026-09-14", btc_price:77097, btc_change:-0.22, drawdown:-38.9, fear:57, fear_label:"贪婪", ahr999:0.4838, mvrv:1.23, wma200:65479, mstr_btc:845050, mstr_price:130.97, mstr_shares:420483000, mstr_mnav:1.12, mstr_debt_ratio:0.1, mstr_cost_basis:75527, etf_btc:1311421, usdc_mcap:74233596257 },
+  { date:"2026-09-15", btc_price:77894, btc_change:0.95, drawdown:-38.2, fear:69, fear_label:"贪婪", ahr999:0.493, mvrv:1.23, wma200:65483, mstr_btc:845050, mstr_price:130.97, mstr_shares:420483000, mstr_mnav:1.12, mstr_debt_ratio:0.1, mstr_cost_basis:75527, etf_btc:1311421, usdc_mcap:74352314421 },
 ];
 // ========== 数据结束 ==========
 
@@ -676,6 +677,7 @@ const dates = RAW_DATA.map(d => d.date);
     { x:'8/24', btc:0,     funding:{STRC:0,    MSTR:2006.5}},
     { x:'8/31', btc:4603,  funding:{STRC:0,    MSTR:602.8}},
     { x:'9/08', btc:0, funding:{STRC:0, MSTR:0} },
+    { x:'9/14', btc:0, funding:{STRC:0, MSTR:0} },
   
   ];
   // 把每周 funding 按总比例换算为 BTC 数量（堆叠柱子按 BTC 计）
