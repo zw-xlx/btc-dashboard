@@ -33,6 +33,40 @@ def fetch_json(url, headers=None, timeout=15):
 def log(*a):
     print('[fetch]', *a, flush=True)
 
+# bitcointreasuries.net 是 2MB 大页面，且偶尔慢到 100s+。
+# 用线程做硬性 wall-clock 截断（urllib 的 timeout 只管单次 socket 操作，
+# 对象体慢速 trickle 读取时不会中断），并全程只下载一次做缓存，供 MSTR/ETF 复用。
+import threading
+_TREASURIES_CACHE = {'html': None, 'done': False}
+
+def get_treasuries_html(deadline=40):
+    """下载 bitcointreasuries.net 首页，带硬性总时限；只下载一次并缓存。
+    deadline 秒内拿不到就返回 ''（上游各自降级），避免拖垮整个采集预算。"""
+    if _TREASURIES_CACHE['done']:
+        return _TREASURIES_CACHE['html'] or ''
+    result = {'html': ''}
+
+    def _worker():
+        try:
+            req = urllib.request.Request('https://bitcointreasuries.net/', headers=UA)
+            with urllib.request.urlopen(req, timeout=deadline) as r:
+                result['html'] = r.read().decode('utf-8', errors='ignore')
+        except Exception as e:
+            log('treasuries 下载失败:', e)
+
+    s = time.time()
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    t.join(deadline)
+    _TREASURIES_CACHE['done'] = True
+    if t.is_alive():
+        log(f'treasuries 超过 {deadline}s 硬截断，放弃')
+        _TREASURIES_CACHE['html'] = ''
+        return ''
+    _TREASURIES_CACHE['html'] = result['html']
+    log(f'treasuries 下载完成 {time.time()-s:.1f}s {len(result["html"])}B')
+    return result['html']
+
 # ============ 数据源 ============
 def get_btc():
     """BTC 价格 + 24h 涨跌幅，CoinGecko 失败降级 Binance"""
@@ -86,20 +120,18 @@ def get_mstr_btc_from_treasuries():
     """降级源：从 bitcointreasuries.net 页面抓 MSTR (Strategy) 的 BTC 持仓。
     页面结构含 name:"Strategy" 或 symbol:"MSTR" ... btc_balance:847363 之类。
     """
-    for _a in range(3):
-        try:
-            req = urllib.request.Request('https://bitcointreasuries.net/', headers=UA)
-            with urllib.request.urlopen(req, timeout=25) as r:
-                raw = r.read().decode('utf-8', errors='ignore')
-            # MSTR/Strategy 是最大持仓公司（2026-09 新格式：holdings:[{asset:"BTC",balance:N}]）
-            mm = re.search(r'symbol:"MSTR".{0,400}?holdings:\[\{asset:"BTC",balance:([\d.]+)', raw, re.DOTALL)
-            if not mm:
-                mm = re.search(r'name:"(?:Strategy|MicroStrategy)".{0,400}?holdings:\[\{asset:"BTC",balance:([\d.]+)', raw, re.DOTALL)
-            if mm:
-                return round(float(mm.group(1)))
-        except Exception as e:
-            log(f'MSTR treasuries retry {_a}:', e)
-            time.sleep(2)
+    raw = get_treasuries_html()
+    if not raw:
+        return None
+    try:
+        # MSTR/Strategy 是最大持仓公司（2026-09 新格式：holdings:[{asset:"BTC",balance:N}]）
+        mm = re.search(r'symbol:"MSTR".{0,400}?holdings:\[\{asset:"BTC",balance:([\d.]+)', raw, re.DOTALL)
+        if not mm:
+            mm = re.search(r'name:"(?:Strategy|MicroStrategy)".{0,400}?holdings:\[\{asset:"BTC",balance:([\d.]+)', raw, re.DOTALL)
+        if mm:
+            return round(float(mm.group(1)))
+    except Exception as e:
+        log('MSTR treasuries 解析失败:', e)
     return None
 
 
@@ -253,13 +285,15 @@ SEC_UA = 'zw-web3 research zw@example.com'
 SEC_CIK = '1050446'
 
 
-def _sec_fetch(url, tries=5):
-    """带官方 UA + 重试的 SEC 请求（SEC 强制要求 UA 含邮箱，间隔≥0.3s）。"""
+def _sec_fetch(url, tries=3, timeout=15):
+    """带官方 UA + 重试的 SEC 请求（SEC 强制要求 UA 含邮箱，间隔≥0.3s）。
+    timeout 收紧到 15s、tries 3 次：worst case ~45s/文档，避免 EDGAR 偶发慢
+    拖垮整个采集预算（原 5×30s=150s/文档）。"""
     last = None
     for _a in range(tries):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': SEC_UA})
-            return urllib.request.urlopen(req, timeout=30).read().decode('utf-8', 'replace')
+            return urllib.request.urlopen(req, timeout=timeout).read().decode('utf-8', 'replace')
         except Exception as e:
             last = e
             time.sleep(1.0)
@@ -400,11 +434,27 @@ def update_mstr_weekly(html_content):
     # 数组末尾（当前最新）披露日 → 只追加严格更晚的新周，保持时间顺序，
     # 不回填数组中间缺失的旧周（避免乱序）。
     last_key = _mmdd_key(xs[-1]) if xs else 0
-    try:
-        weeks = get_mstr_weekly_8k(limit=25)
-    except Exception as e:
-        log('mstr_weekly: EDGAR 拉取失败:', e)
+    # EDGAR 偶发极慢（200s+），用线程做硬性 90s wall-clock 截断：
+    # 拉不到就当天跳过周度追加（周度数据下次 run 自然补上），不拖垮整体预算。
+    _box = {'weeks': None, 'err': None}
+
+    def _fetch_weeks():
+        try:
+            # 只扫最近 6 份 8-K 足够发现新的一周（周度披露），不必每天重拉 25 份
+            _box['weeks'] = get_mstr_weekly_8k(limit=6)
+        except Exception as e:
+            _box['err'] = e
+
+    _th = threading.Thread(target=_fetch_weeks, daemon=True)
+    _th.start()
+    _th.join(90)
+    if _th.is_alive():
+        log('mstr_weekly: EDGAR 超过 90s 硬截断，当天跳过周度追加')
         return html_content, 0
+    if _box['err'] is not None:
+        log('mstr_weekly: EDGAR 拉取失败:', _box['err'])
+        return html_content, 0
+    weeks = _box['weeks'] or []
     new_lines = []
     for w in weeks:
         if w['x'] in existing:
@@ -430,16 +480,7 @@ def get_etf_btc(btc_price):
     含 18 个实体：14 只现货ETF + River交易所 + BITW/GDLC多币种基金 + MSBT信托。
     与用户在 bitcointreasuries.net 网页看到的 Total 一致，避免口径歧义。
     """
-    for _attempt in range(3):
-        try:
-            req = urllib.request.Request('https://bitcointreasuries.net/', headers=UA)
-            with urllib.request.urlopen(req, timeout=25) as r:
-                html_raw = r.read().decode('utf-8', errors='ignore')
-            break
-        except Exception as e:
-            log(f'ETF bitcointreasuries retry {_attempt}:', e)
-            time.sleep(2)
-            html_raw = ''
+    html_raw = get_treasuries_html()
     try:
         # 2026-09 页面改版：数值从 btc_balance 移到 holdings:[{asset:"BTC",balance:N}]
         # 按 symbol 就近（400字内）取其 holdings 里的 BTC balance
