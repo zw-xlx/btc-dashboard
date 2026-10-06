@@ -407,6 +407,7 @@ const RAW_DATA = [
   { date:"2026-10-03", btc_price:84601, btc_change:-0.51, drawdown:-32.9, fear:67, fear_label:"贪婪", ahr999:0.5627, mvrv:1.23, wma200:66177, mstr_btc:847666, mstr_price:160.5, mstr_shares:421901122, mstr_mnav:1.15, mstr_debt_ratio:0.09, mstr_cost_basis:75527, etf_btc:1345809, usdc_mcap:74116351399 },
   { date:"2026-10-04", btc_price:84807, btc_change:0.25, drawdown:-32.7, fear:65, fear_label:"贪婪", ahr999:0.5644, mvrv:1.23, wma200:66178, mstr_btc:847666, mstr_price:160.01, mstr_shares:421901122, mstr_mnav:1.15, mstr_debt_ratio:0.09, mstr_cost_basis:75527, etf_btc:1345809, usdc_mcap:74104774369 },
   { date:"2026-10-05", btc_price:86648, btc_change:2.17, drawdown:-31.3, fear:70, fear_label:"贪婪", ahr999:0.5879, mvrv:1.58, wma200:66534, mstr_btc:847666, mstr_price:160.01, mstr_shares:421901122, mstr_mnav:1.12, mstr_debt_ratio:0.09, mstr_cost_basis:75527, etf_btc:1345809, usdc_mcap:74105531249 },
+  { date:"2026-10-06", btc_price:85564, btc_change:-1.26, drawdown:-32.1, fear:73, fear_label:"贪婪", ahr999:0.5722, mvrv:1.57, wma200:66528, mstr_btc:848000.3, mstr_price:164.43, mstr_shares:421994016, mstr_mnav:1.16, mstr_debt_ratio:0.09, mstr_cost_basis:75527, etf_btc:1345809, usdc_mcap:74240512646 },
 ];
 // ========== 数据结束 ==========
 
@@ -615,6 +616,7 @@ const dates = RAW_DATA.map(d => d.date);
     { x:'2026-09-01', y:845050 },
     { x:'2026-09-22', y:846000 },
     { x:'2026-09-29', y:847666 },
+    { x:'2026-10-06', y:848000.3 },
   ];
   new Chart(document.getElementById('chart-mstr-btc').getContext('2d'), {
     type:'line',
